@@ -1,0 +1,2 @@
+# delfos
+Trading bot
