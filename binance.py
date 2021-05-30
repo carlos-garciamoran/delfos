@@ -1,5 +1,4 @@
 import hmac
-import json
 import time
 import datetime
 
@@ -51,14 +50,7 @@ def get_account_info():
     '''Get current account information. Weight: 10'''
     endpoint = V3 + '/account'
 
-    # UNIX time in milliseconds (Python's default is in seconds)
-    # params = { 'timestamp': int(time.time() * 1000) }
-    # payload = urllib.urlencode(params).encode()
-
-    # signature = hmac.new(SECRETKEY, payload, 'SHA256').hexdigest()
-    # params['signature'] = signature
     params = sign_timestamp()
-
     resp = s.get(endpoint, params=params)
 
     return resp.json(), resp.status_code
@@ -198,9 +190,11 @@ def close_order(position, exit_price):
 
     return position
 
-def sign_timestamp(): # UNIX time in milliseconds (Python's default is in seconds)
+
+def sign_timestamp():
     '''Sign millisecond timestamp with HMAC256 signature using Binance API's secret key.'''
-    # UNIX time in milliseconds (Python's default is in seconds)
+
+    # Convert UNIX time from seconds to milliseconds
     params = { 'timestamp': int(time.time() * 1000) }
     payload = urllib.urlencode(params).encode()
 

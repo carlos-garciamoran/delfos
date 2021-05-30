@@ -9,12 +9,11 @@ from indicators import *
 from strategies import *
 
 
-allocated = 0.0     # capital allocated in positions
-account = 1000.0    # available capital + (realized) pnl
-pnl = [0.0, 0.0]    # total realized and recompounded profit & loss [percentage, USDT]
-wins, loses = 0, 0  # counters of trades with profits and loses
-
-positions = []      # stores the objects of the open positions
+account     = 1000.0      # available capital + (realized) pnl
+allocated   = 0.0         # capital allocated in positions
+pnl         = [0.0, 0.0]  # total realized and recompounded profit & loss [percentage, USDT]
+positions   = []          # stores the objects of the open positions
+wins, loses = 0, 0        # counters of trades with profits and loses
 
 emojis = {
     True:  '💎', False:  '❌',
@@ -35,12 +34,9 @@ def main():
         # Each array stores an object for each pair made up of [symbol, price, RSI]
         potential = scan(pairs)  # Takes ~16 secs to scan 223 pairs
 
-        # logger.info('🔎 Found 🐃 %d buys & 🐻 %d sells' % (len(sells), len(buys)))
-        logger.info('🔎 Found %d potential positions' % len(potential))
+        logger.debug('🔎 Found %d potential positions' % len(potential))
         logger.info(potential)
-        # logger.info(sells)
 
-        # TODO: open positions for each interesting pair. Always check available balance!!
         open_positions(potential)
 
 
@@ -175,7 +171,7 @@ def open_positions(potential):
             logger.warning('{} Opened {} {} at {} with ${:0.2f}'.format(
                 emojis[side], pair['symbol'], side, pair['price'], position_size
             ))
-            logger.info('🚫 SL at %0.5f\t\t 🤝 TP at %0.5f' % (position['stop_loss'], position['take_profit']))
+            logger.info('🚫 SL: %0.5f\t\t 🤝 TP: %0.5f' % (position['stop_loss'], position['take_profit']))
             logger.info('💰 Unused capital: ${:0.2f}\t 💵 Allocated capital: ${:0.2f} | {} positions'.format(
                 account, allocated, len(positions)
             ))
@@ -193,7 +189,7 @@ if __name__ == '__main__':
 
     logger.remove()
 
-    # NOTE: use debug() for writing to STDOUT but NOT to logfile
+    # Use debug() for writing to STDOUT but NOT to logfile
     logger.add(logfile, format="{time:MM-DD HH:mm:ss.SSS} | {message}", level="INFO")
     logger.add(sys.stderr, colorize=True, format="<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{message}</level>")
 
