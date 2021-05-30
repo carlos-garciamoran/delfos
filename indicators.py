@@ -1,4 +1,3 @@
-import json
 from dotenv import dotenv_values, load_dotenv
 from loguru import logger
 from requests import Session

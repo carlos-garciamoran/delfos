@@ -7,12 +7,12 @@ from constants import *
 from indicators import *
 from strategies import *
 
-account = {
+track = {
     'allocated': 0.0,         # capital allocated in positions
     'liquid':    1000.0,      # available capital + (realized) pnl
-    'pnl':       [0.0, 0.0],  # total realized and recompounded profit & loss [percentage, USDT]
     'loses':     0,           # counters of trades with profits and loses
     'wins':      0,
+    'pnl':       [0.0, 0.0],  # total realized and recompounded profit & loss [percentage, USDT]
 }
 
 allocated = 0.0     # capital allocated in positions
@@ -22,56 +22,44 @@ wins, loses = 0, 0  # counters of trades with profits and loses
 
 positions = []      # stores the objects of the open positions
 
+# Naming convention used by Binance (as opposed to bullish/bearish)
+buy_positions, sell_positions = [], []
+
+# Testing
+buy_symbols, sell_symbols = [], []
+
 
 def main():
     while True:
         # Fetch prices from Binance USDT pairs and the request's HTTP status code
         pairs, code = get_prices()
 
-        # Error checking
+        # API error checking
         if code != 200:
             logger.error('[!] Binance API returned non-200 (%d); exiting...' % code)
             return
 
-        # Arrays store an object for each pair made up of: symbol, price, and RSI
-        bearish, bullish = fetch_potential(pairs)
+        # Each array stores an object for each pair made up of [symbol, price, RSI]
+        potential = scan(pairs)  # Takes ~16 secs to scan 223 pairs
 
-        # Sort the pairs by their respective extremes. Pairs with the most extreme RSI's are opened first
-        bearish = sorted(bearish, key=lambda k: k['RSI'], reverse=True)  # Highest RSI first
-        bullish = sorted(bullish, key=lambda k: k['RSI'])                # Lowest  RSI first
+        # logger.info('🔎 Found 🐃 %d buys & 🐻 %d sells' % (len(sells), len(buys)))
+        logger.info('🔎 Found %d potential positions' % len(potential))
+        logger.info(potential)
+        # logger.info(sells)
 
-        logger.info('🔎 Found %d bearish & %d bullish' % (len(bearish), len(bullish)))
-
-        logger.info(bearish)
-        logger.info(bullish)
-
-        bearish_symbols = list(map(lambda p: p['symbol'], bearish))
-        bullish_symbols = list(map(lambda p: p['symbol'], bullish))
-
-        # TODO: first close existing positions, then open interesting positions
-        for position in positions:
-            if position['symbol'] in bearish_symbols:
-                # close_position()
-                pass
-
-            if position['symbol'] in bullish_symbols:
-                pass
-
-        # TODO: open positions for each pair. Always check available balance!!
-        # TODO: start logging price when position is opened
+        # TODO: open positions for each interesting pair. Always check available balance!!
+        open_positions(potential)
 
 
-def fetch_potential(pairs):
-    '''Store pairs matching price signal for post-ordering. Takes ~16 secs to scan 223 pairs.'''
-    bearish, bullish = [], []
+def scan(pairs):
+    '''Fetch RSI, close positions which need so, and store pairs matching price signal for post-ordering.'''
+    potential = []
 
-    # NOTE: expensive operation
-    open_symbols = list(map(lambda p: p['symbol'], positions))
-
+    # For each pair, fetch its RSI and check if it should be closed.
     for pair in pairs:
         symbol = pair['symbol']
 
-        # Add slash between symbol and base (USDT) | TODO: Improve without using .find()
+        # Add slash between symbol and base (USDT) | TODO: refactor without using .find()
         coin = symbol[:symbol.find('USDT')]
         t_symbol = coin + '/' + symbol[-4:]
 
@@ -79,10 +67,11 @@ def fetch_potential(pairs):
 
         # Catch odd error related to openssl socket connection
         try:
-            RSI, code = get_RSI(t_symbol)
-        except OSError:  # requests.exceptions.ConnectionError
+            pair['RSI'], code = get_RSI(t_symbol)
+        except OSError:
             continue
 
+        # API error checking
         if code != 200:
             # These TAAPI errors appear often, so they are not logged
             if code == 400 or code == 500:
@@ -91,107 +80,109 @@ def fetch_potential(pairs):
             logger.error('[!] TAAPI error returned an odd non-200 (%d); exiting...' % code)
             sys.exit(1)
 
-        logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(pair['price'], RSI))
+        logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(pair['price'], pair['RSI']))
 
-        pair['RSI'] = RSI
+        # NOTE: alternative: check if position (corresponding to the pair) should be closed based on SL/TP + RSI
+        close_if_needed(symbol, pair['price'], pair['RSI'])
 
+        # NOTE: could use only one array and determine side based on either comparison (e.g. for open_positions())
         # Only consider pairs meeting the price signal
-        if RSI >= RSI_MAX:
-            # TODO: look for open position and close it if opposite direction
-            bearish.append(pair)
-            if symbol in open_symbols:
-                # TODO: close position
-                pass
+        if pair['RSI'] >= RSI_MAX or pair['RSI'] <= RSI_MIN:
+            potential.append(pair)
 
-        elif RSI <= RSI_MIN:
-            bullish.append(pair)
+        # NOTE: alternative, store each pair in a different array
+        # if pair['RSI'] >= RSI_MAX:    # RSI overbought, assume price drop
+        #     sells.append(pair)
+        # elif pair['RSI'] <= RSI_MIN:  # RSI oversold, assume price rise
+        #     buys.append(pair)
 
-        # think(symbol, price, RSI)
-    return bearish, bullish
+    # Sort the array by their respective extremes. Pairs with the most extreme RSI's are opened first
+    # IMPORTANT NOTE: caveat with using only 1 array is that BUYs will be sorted correctly but bearish not;
+    #                 bearish positions will be sorted from least to most extreme (as opposed to bullish)
+    #                 to fix this we could either sort the array manually or use the 2-array logic
+    potential = sorted(potential, key=lambda k: k['RSI'])  # Lowest RSI first (i.e. BUYs have priority)
 
+    # Alternative:
+    # Sort the array by their respective extremes. Pairs with the most extreme RSI's are opened first
+    # buys  = sorted(buys,  key=lambda k: k['RSI'])                # Lowest  RSI first (i.e. has priority)
+    # sells = sorted(sells, key=lambda k: k['RSI'], reverse=True)  # Highest RSI first (i.e. has priority)
 
-def close_position(position):
-    position = close(position, price)
-    positions.remove(position)
-
-    if position['pnl'][0] >= 0:
-        wins += 1
-    else:
-        loses += 1
-
-    allocated -= position['size']                     # Adjust allocated capital
-    account += position['size'] + position['pnl'][1]  # Recompound magic, baby
-    pnl[0] += position['pnl'][0]                      # Record net p&l (percentage)
-    pnl[1] += position['pnl'][1]                      # Idem           (USDT)
-
-    logger.info('💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}'.format(account+allocated, allocated))
-    logger.info('🚫 SL hit: %r\t 🤝 TP hit: %r' % (stop_loss_hit, take_profit_hit))
-    logger.info('💸 Total realized P&L is ${:0.2f}'.format(pnl))
-    logger.info('🤑 Wins: %d\t 🤔 Loses: %d' % (wins, loses))
+    return potential
 
 
-def think(symbol, price, RSI):
-    global account, allocated, liquid, loses, pnl, wins
+def close_if_needed(symbol, price, RSI):
+    global allocated, account, pnl, wins, loses
 
     opened = False
 
-    # If no price signal, quit
-    if RSI > RSI_MIN and RSI < RSI_MAX:
-        return
-
-    # Close open positions
     for position in positions:
         if position['symbol'] == symbol:
             opened = True
+            break
 
-            if position['side'] == 'BUY':
-                stop_loss_hit   = price <= position['stop_loss']
-                take_profit_hit = price >= position['take_profit']
+    if opened:
+        if position['side'] == 'BUY':
+            stop_loss_hit   = price <= position['stop_loss']
+            take_profit_hit = price >= position['take_profit']
+        else:
+            stop_loss_hit   = price >= position['stop_loss']
+            take_profit_hit = price <= position['take_profit']
+
+        # Strategy is called here. Always returns either true or false.
+        price_signal_hit = evaluate_RSI(position, price, RSI)
+
+        needs_to_close = price_signal_hit or stop_loss_hit or take_profit_hit
+
+        if needs_to_close:
+            position = close_order(position, price)
+            positions.remove(position)
+
+            if position['pnl'][0] >= 0:
+                wins += 1
             else:
-                stop_loss_hit   = price >= position['stop_loss']
-                take_profit_hit = price <= position['take_profit']
+                loses += 1
 
-            # TODO: run multiple strategies at the same time.
+            allocated -= position['size']                     # Adjust allocated capital
+            account += position['size'] + position['pnl'][1]  # Recompound magic, baby
+            pnl[0] += position['pnl'][0]                      # Record net p&l (percentage)
+            pnl[1] += position['pnl'][1]                      # Idem           (USDT)
 
-            # Strategy is called here. Always returns either true or false.
-            needsToClose = evaluateRSI(position, price, RSI) or stop_loss_hit or take_profit_hit
+            logger.info('💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}'.format(account+allocated, allocated))
+            logger.info('🚫 SL hit: %r\t 🤝 TP hit: %r' % (stop_loss_hit, take_profit_hit))
+            logger.info('💸 Total realized P&L is %{:0.2f}, ${:0.2f}'.format(pnl[0], pnl[1]))
+            logger.info('🤑 Wins: %d\t 🤔 Loses: %d' % (wins, loses))
 
-            if needsToClose:
-                position = close(position, price)
-                positions.remove(position)
 
-                if position['pnl'][0] >= 0:
-                    wins += 1
-                else:
-                    loses += 1
+def open_positions(potential):
+    '''Open positions based on potential if there's available capital. Ensure no more than 1 position per symbol is opened'''
+    global allocated, account, pnl, wins, loses
 
-                allocated -= position['size']                     # Adjust allocated capital
-                account += position['size'] + position['pnl'][1]  # Recompound magic, baby
-                pnl[0] += position['pnl'][0]                      # Record net p&l (percentage)
-                pnl[1] += position['pnl'][1]                      # Idem           (USDT)
+    # NOTE: expensive op: O(N) growth, where N=len(positions)
+    open_symbols = list(map(lambda p: p['symbol'], positions))
 
-                logger.info('💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}'.format(account+allocated, allocated))
-                logger.info('🚫 SL hit: %r\t 🤝 TP hit: %r' % (stop_loss_hit, take_profit_hit))
-                logger.info('💸 Total realized P&L is ${:0.2f}'.format(pnl))
-                logger.info('🤑 Wins: %d\t 🤔 Loses: %d' % (wins, loses))
+    # TODO: run multiple strategies at the same time.
 
-    # halving is for testing purposes
-    position_size = (account + allocated) * ACCOUNT_RISK / STOP_LOSS / 2
+    for pair in potential:
+        if pair['symbol'] in open_symbols:
+            continue
 
-    # NOTE: position_size < account check may not be needed
-    # Open a new position if there is minimum capital and there's no existing position
-    if position_size < account and not opened:
-        # By this point there is a price signal (RSI is either >= RSI_MAX or <= RSI_MIN)
-        side = 'SELL' if RSI >= RSI_MAX else 'BUY'
+        # Halving is for testing purposes
+        position_size = (account + allocated) * ACCOUNT_RISK / STOP_LOSS / 2
 
-        positions.append( new_order( symbol, side, price, position_size ) )
+        # NOTE: position_size < account check may not be needed due to position_size formula
+        # Open a new position if there is minimum capital and there's no existing position
+        if position_size < account:
+            # By this point there is a price signal (RSI is either >= RSI_MAX or <= RSI_MIN due to scan() filtering)
+            side = 'SELL' if pair['RSI'] >= RSI_MAX else 'BUY'
 
-        account -= position_size    # Remove the position size from the available capital
-        allocated += position_size  # Add the position size to the allocated counter
+            positions.append( new_order( pair['symbol'], side, pair['price'], position_size ) )
 
-        logger.info('💰 Unused capital: ${:0.2f}\t 💵 Allocated capital: ${:0.2f} | {} positions'.format(
-            account, allocated, len(positions)
-        ))
+            account -= position_size    # Remove the position size from the available capital
+            allocated += position_size  # Add the position size to the allocated counter
+
+            logger.info('💰 Unused capital: ${:0.2f}\t 💵 Allocated capital: ${:0.2f} | {} positions'.format(
+                account, allocated, len(positions)
+            ))
 
 
 if __name__ == '__main__':
@@ -209,6 +200,7 @@ if __name__ == '__main__':
 
     logger.debug('Logging at: %s' % logfile)
 
+    # TODO: start logging price when position is opened
     logger.info('ACCOUNT_RISK: %0.2f' % ACCOUNT_RISK)
     logger.info('STOP_LOSS: %0.2f\t TAKE_PROFIT: %0.2f' % (STOP_LOSS, TAKE_PROFIT))
     logger.info('RSI_MAX: %d\tRSI_MIN: %d' % (RSI_MAX, RSI_MIN))

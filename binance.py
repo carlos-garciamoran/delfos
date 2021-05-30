@@ -192,7 +192,7 @@ def new_order(symbol, side, entry_price, size):
     logger.warning('✅{} Opened {} {} at {} with ${:0.2f}'.format(
         emojis[side], symbol, side, entry_price, size
     ))
-    logger.debug('🚫 SL at %0.5f\t\t 🤝 TP at %0.5f' % (stop_loss, take_profit))
+    logger.info('🚫 SL at %0.5f\t\t 🤝 TP at %0.5f' % (stop_loss, take_profit))
 
     return position
 
