@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import sys
 from loguru import logger
 
@@ -7,13 +8,6 @@ from constants import *
 from indicators import *
 from strategies import *
 
-track = {
-    'allocated': 0.0,         # capital allocated in positions
-    'liquid':    1000.0,      # available capital + (realized) pnl
-    'loses':     0,           # counters of trades with profits and loses
-    'wins':      0,
-    'pnl':       [0.0, 0.0],  # total realized and recompounded profit & loss [percentage, USDT]
-}
 
 allocated = 0.0     # capital allocated in positions
 account = 1000.0    # available capital + (realized) pnl
@@ -22,11 +16,10 @@ wins, loses = 0, 0  # counters of trades with profits and loses
 
 positions = []      # stores the objects of the open positions
 
-# Naming convention used by Binance (as opposed to bullish/bearish)
-buy_positions, sell_positions = [], []
-
-# Testing
-buy_symbols, sell_symbols = [], []
+emojis = {
+    True:  '💎', False:  '❌',
+    'BUY': '🐃', 'SELL': '🐻',
+}
 
 
 def main():
@@ -85,27 +78,13 @@ def scan(pairs):
         # NOTE: alternative: check if position (corresponding to the pair) should be closed based on SL/TP + RSI
         close_if_needed(symbol, pair['price'], pair['RSI'])
 
-        # NOTE: could use only one array and determine side based on either comparison (e.g. for open_positions())
         # Only consider pairs meeting the price signal
         if pair['RSI'] >= RSI_MAX or pair['RSI'] <= RSI_MIN:
+            pair['strength'] = abs(50 - pair['RSI'])  # determines strength of RSI
             potential.append(pair)
 
-        # NOTE: alternative, store each pair in a different array
-        # if pair['RSI'] >= RSI_MAX:    # RSI overbought, assume price drop
-        #     sells.append(pair)
-        # elif pair['RSI'] <= RSI_MIN:  # RSI oversold, assume price rise
-        #     buys.append(pair)
-
-    # Sort the array by their respective extremes. Pairs with the most extreme RSI's are opened first
-    # IMPORTANT NOTE: caveat with using only 1 array is that BUYs will be sorted correctly but bearish not;
-    #                 bearish positions will be sorted from least to most extreme (as opposed to bullish)
-    #                 to fix this we could either sort the array manually or use the 2-array logic
-    potential = sorted(potential, key=lambda k: k['RSI'])  # Lowest RSI first (i.e. BUYs have priority)
-
-    # Alternative:
-    # Sort the array by their respective extremes. Pairs with the most extreme RSI's are opened first
-    # buys  = sorted(buys,  key=lambda k: k['RSI'])                # Lowest  RSI first (i.e. has priority)
-    # sells = sorted(sells, key=lambda k: k['RSI'], reverse=True)  # Highest RSI first (i.e. has priority)
+    # Most extreme RSIs have priority (i.e. positions are opened first). Strength is key ;)
+    potential = sorted(potential, key=lambda k: k['strength'], reverse=True)
 
     return potential
 
@@ -147,10 +126,21 @@ def close_if_needed(symbol, price, RSI):
             pnl[0] += position['pnl'][0]                      # Record net p&l (percentage)
             pnl[1] += position['pnl'][1]                      # Idem           (USDT)
 
+            logger.warning('{} Closed {} {} at {}! P&L is {:0.2f}%, ${:0.2f}'.format(
+                emojis[position['pnl'][0] >= 0], position['symbol'], position['side'], position['exit_price'], position['pnl'][0], position['pnl'][1]
+            ))
             logger.info('💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}'.format(account+allocated, allocated))
-            logger.info('🚫 SL hit: %r\t 🤝 TP hit: %r' % (stop_loss_hit, take_profit_hit))
-            logger.info('💸 Total realized P&L is %{:0.2f}, ${:0.2f}'.format(pnl[0], pnl[1]))
+
+            if stop_loss_hit:
+                logger.info('🚫 SL hit' % stop_loss_hit)
+            elif take_profit_hit:
+                logger.info('🤝 TP hit' % take_profit_hit)
+
+            logger.info('💸 Total realized P&L is {:0.2f}%, ${:0.2f}'.format(pnl[0], pnl[1]))
             logger.info('🤑 Wins: %d\t 🤔 Loses: %d' % (wins, loses))
+
+            with open('%s-closed.positions' % logfile, 'a') as fd:
+                fd.write(json.dumps(position, indent=4) + '\n')
 
 
 def open_positions(potential):
@@ -163,26 +153,35 @@ def open_positions(potential):
     # TODO: run multiple strategies at the same time.
 
     for pair in potential:
+        # Do not open a new position if there's an existing position
         if pair['symbol'] in open_symbols:
             continue
 
         # Halving is for testing purposes
         position_size = (account + allocated) * ACCOUNT_RISK / STOP_LOSS / 2
 
-        # NOTE: position_size < account check may not be needed due to position_size formula
-        # Open a new position if there is minimum capital and there's no existing position
+        # This check is needed in the edge case of `ACCOUNT_RISK > STOP_LOSS`
         if position_size < account:
             # By this point there is a price signal (RSI is either >= RSI_MAX or <= RSI_MIN due to scan() filtering)
+            # BUY/SELL is the naming convention used by Binance, as opposed to bullish/bearish
             side = 'SELL' if pair['RSI'] >= RSI_MAX else 'BUY'
 
-            positions.append( new_order( pair['symbol'], side, pair['price'], position_size ) )
+            position = new_order(pair['symbol'], side, pair['price'], position_size)
+            positions.append(position)
 
             account -= position_size    # Remove the position size from the available capital
             allocated += position_size  # Add the position size to the allocated counter
 
+            logger.warning('{} Opened {} {} at {} with ${:0.2f}'.format(
+                emojis[side], pair['symbol'], side, pair['price'], position_size
+            ))
+            logger.info('🚫 SL at %0.5f\t\t 🤝 TP at %0.5f' % (position['stop_loss'], position['take_profit']))
             logger.info('💰 Unused capital: ${:0.2f}\t 💵 Allocated capital: ${:0.2f} | {} positions'.format(
                 account, allocated, len(positions)
             ))
+
+            with open('%s.positions' % logfile, 'a') as fd:
+                fd.write(json.dumps(position, indent=4) + '\n')
 
 
 if __name__ == '__main__':
@@ -202,7 +201,7 @@ if __name__ == '__main__':
 
     # TODO: start logging price when position is opened
     logger.info('ACCOUNT_RISK: %0.2f' % ACCOUNT_RISK)
-    logger.info('STOP_LOSS: %0.2f\t TAKE_PROFIT: %0.2f' % (STOP_LOSS, TAKE_PROFIT))
+    logger.info('STOP_LOSS: %0.2f\tTAKE_PROFIT: %0.2f' % (STOP_LOSS, TAKE_PROFIT))
     logger.info('RSI_MAX: %d\tRSI_MIN: %d' % (RSI_MAX, RSI_MIN))
 
     try:

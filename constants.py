@@ -1,13 +1,10 @@
 ACCOUNT_RISK = 0.01  # risk taken per trade (e.g. 0.01 = 1% of account)
 
 STOP_LOSS = 0.04     # distance from entry price (e.g. 0.07 = 7% away)
-TAKE_PROFIT = 0.05   # idem
+TAKE_PROFIT = 0.07   # idem
 
-# POSITION_SIZE = 0.2      # UNUSED: position size (e.g. 0.2 = 20% of total account per position)
-# MIN_POSITION_SIZE = 70   # UNUSED: only open positions greater than this size (USDT)
-
-RSI_MAX = 70
-RSI_MIN = 30
+RSI_MAX = 75
+RSI_MIN = 25
 
 # TODO: implement into strategy
 RSI_BUY_OPEN = 30

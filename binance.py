@@ -20,11 +20,6 @@ URL = 'https://api.binance.com'
 SAPI = URL + '/sapi/v1'
 V3   = URL + '/api/v3'
 
-emojis = {
-    True:  '💎', False:  '❌',
-    'BUY': '🐃', 'SELL': '🐻',
-}
-
 s = Session()
 s.headers.update({ 'X-MBX-APIKEY': APIKEY })
 
@@ -186,14 +181,6 @@ def new_order(symbol, side, entry_price, size):
         'closed_at': None,
     }
 
-    with open('postitions.bak', 'a') as fd:
-        fd.write(json.dumps(position, indent=4) + '\n')
-
-    logger.warning('✅{} Opened {} {} at {} with ${:0.2f}'.format(
-        emojis[side], symbol, side, entry_price, size
-    ))
-    logger.info('🚫 SL at %0.5f\t\t 🤝 TP at %0.5f' % (stop_loss, take_profit))
-
     return position
 
 
@@ -208,13 +195,6 @@ def close_order(position, exit_price):
 
     position['pnl'][0] *= 100
     position['pnl'][1] = position['size'] * position['pnl'][0] / 100
-
-    with open('postitions.bak', 'a') as fd:
-        fd.write(json.dumps(position, indent=4) + '\n')
-
-    logger.warning('{} Closed {} {} at {}! P&L is {:0.2f}%, ${:0.2f}'.format(
-        emojis[position['pnl'][0] >= 0], position['symbol'], position['side'], exit_price, position['pnl'][0], position['pnl'][1]
-    ))
 
     return position
 
