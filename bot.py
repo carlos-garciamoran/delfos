@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import json
 import sys
+from time import sleep
+
 from loguru import logger
 
 from binance import *
@@ -31,7 +33,7 @@ def main():
             logger.error('[!] Binance API returned non-200 (%d); exiting...' % code)
             return
 
-        # Each array stores an object for each pair made up of [symbol, price, RSI]
+        # Stores an object for each pair made up of [symbol, price, RSI, strength]
         potential = scan(pairs)  # Takes ~16 secs to scan 223 pairs
 
         logger.debug('🔎 Found %d potential positions' % len(potential))
@@ -44,13 +46,13 @@ def scan(pairs):
     '''Fetch RSI, close positions which need so, and store pairs matching price signal for post-ordering.'''
     potential = []
 
-    # For each pair, fetch its RSI and check if it should be closed.
+    # For each pair, fetch its RSI and check if its position should be closed.
     for pair in pairs:
         symbol = pair['symbol']
 
-        # Add slash between symbol and base (USDT) | TODO: refactor without using .find()
+        # TODO: refactor without using .find()
         coin = symbol[:symbol.find('USDT')]
-        t_symbol = coin + '/' + symbol[-4:]
+        t_symbol = '{}/{}'.format(coin, symbol[-4:])
 
         logger.debug('💡 ' + coin)
 
@@ -62,34 +64,39 @@ def scan(pairs):
 
         # API error checking
         if code != 200:
+            # TODO: setup 429 catch logic, sleep for some time, etc.
             # These TAAPI errors appear often, so they are not logged
             if code == 400 or code == 500:
                 continue
 
-            logger.error('[!] TAAPI error returned an odd non-200 (%d); exiting...' % code)
+            logger.error('[!] TAAPI returned an odd non-200 (%d); exiting...' % code)
             sys.exit(1)
 
         logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(pair['price'], pair['RSI']))
 
-        # NOTE: alternative: check if position (corresponding to the pair) should be closed based on SL/TP + RSI
         close_if_needed(symbol, pair['price'], pair['RSI'])
 
         # Only consider pairs meeting the price signal
         if pair['RSI'] >= RSI_MAX or pair['RSI'] <= RSI_MIN:
-            pair['strength'] = abs(50 - pair['RSI'])  # determines strength of RSI
+            pair['strength'] = abs(50 - pair['RSI'])   # priority metric
             potential.append(pair)
 
+        # Been getting some 429's from TAAPI lately
+        sleep(0.07)
+
     # Most extreme RSIs have priority (i.e. positions are opened first). Strength is key ;)
-    potential = sorted(potential, key=lambda k: k['strength'], reverse=True)
+    potential.sort(key=lambda k: k['strength'], reverse=True)
 
     return potential
 
 
 def close_if_needed(symbol, price, RSI):
+    '''Close a position if SL or TP has been hit or there is a closing price signal.'''
     global allocated, account, pnl, wins, loses
 
     opened = False
 
+    # Search for an existing position for the given symbol.
     for position in positions:
         if position['symbol'] == symbol:
             opened = True
@@ -128,28 +135,26 @@ def close_if_needed(symbol, price, RSI):
             logger.info('💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}'.format(account+allocated, allocated))
 
             if stop_loss_hit:
-                logger.info('🚫 SL hit' % stop_loss_hit)
+                logger.info('🚫 SL hit')
             elif take_profit_hit:
-                logger.info('🤝 TP hit' % take_profit_hit)
+                logger.info('🤝 TP hit')
 
             logger.info('💸 Total realized P&L is {:0.2f}%, ${:0.2f}'.format(pnl[0], pnl[1]))
             logger.info('🤑 Wins: %d\t 🤔 Loses: %d' % (wins, loses))
 
-            with open('%s-closed.positions' % logfile, 'a') as fd:
+            with open('%s-closed' % logfile, 'a') as fd:
                 fd.write(json.dumps(position, indent=4) + '\n')
 
 
 def open_positions(potential):
-    '''Open positions based on potential if there's available capital. Ensure no more than 1 position per symbol is opened'''
+    '''Open positions based on RSI strength. Ensure no more than 1 position per symbol is opened'''
     global allocated, account, pnl, wins, loses
 
     # NOTE: expensive op: O(N) growth, where N=len(positions)
     open_symbols = list(map(lambda p: p['symbol'], positions))
 
-    # TODO: run multiple strategies at the same time.
-
     for pair in potential:
-        # Do not open a new position if there's an existing position
+        # Do not open a new position if there's an existing position (based on the symbol)
         if pair['symbol'] in open_symbols:
             continue
 
@@ -157,7 +162,7 @@ def open_positions(potential):
         position_size = (account + allocated) * ACCOUNT_RISK / STOP_LOSS / 2
 
         # This check is needed in the edge case of `ACCOUNT_RISK > STOP_LOSS`
-        if position_size < account:
+        if position_size <= account:
             # By this point there is a price signal (RSI is either >= RSI_MAX or <= RSI_MIN due to scan() filtering)
             # BUY/SELL is the naming convention used by Binance, as opposed to bullish/bearish
             side = 'SELL' if pair['RSI'] >= RSI_MAX else 'BUY'
@@ -176,7 +181,7 @@ def open_positions(potential):
                 account, allocated, len(positions)
             ))
 
-            with open('%s.positions' % logfile, 'a') as fd:
+            with open('%s-positions' % logfile, 'a') as fd:
                 fd.write(json.dumps(position, indent=4) + '\n')
 
 
