@@ -1,6 +1,8 @@
+from requests import Session
+
 from dotenv import dotenv_values, load_dotenv
 from loguru import logger
-from requests import Session
+
 
 load_dotenv()
 
@@ -22,7 +24,12 @@ def get_RSI(symbol):
 
     # Endpoint sometimes returns a 500
     if resp.status_code == 200:
-        RSI = resp.json()['value']
-        # RSI = json.loads(resp.text)['value']
+        try:
+            RSI = resp.json()['value']
+        except KeyError:
+            logger.error('[!] Crashed on TAAPI parsing, dumping response...')
+            logger.error(resp.content)
+    else:
+        return -1, resp.status_code, resp.text
 
-    return RSI, resp.status_code
+    return RSI, resp.status_code, None

@@ -25,12 +25,15 @@ emojis = {
 
 def main():
     while True:
+        logger.debug('📡 Hitting Binance...')
+
         # Fetch prices from Binance USDT pairs and the request's HTTP status code
-        pairs, code = get_prices()
+        pairs, code, error = get_prices()
 
         # API error checking
         if code != 200:
             logger.error('[!] Binance API returned non-200 (%d); exiting...' % code)
+            logger.error(error)
             return
 
         # Stores an object for each pair made up of [symbol, price, RSI, strength]
@@ -58,40 +61,45 @@ def scan(pairs):
 
         # Catch odd error related to openssl socket connection
         try:
-            pair['RSI'], code = get_RSI(t_symbol)
+            pair['RSI'], code, error = get_RSI(t_symbol)
         except OSError:
             continue
 
         # API error checking
         if code != 200:
-            # TODO: setup 429 catch logic, sleep for some time, etc.
-            # These TAAPI errors appear often, so they are not logged
+            logger.error('[!] Got %d from TAAPI' % code)
+            logger.error(error)
+
+            # 500 responses from TAAPI come with an empty body
             if code == 400 or code == 500:
                 continue
-
-            logger.error('[!] TAAPI returned an odd non-200 (%d); exiting...' % code)
-            sys.exit(1)
+            elif code == 429:
+                logger.warning("[!] Got 429 from TAAPI")
+                sleep(180)  # The rate-limit-exceeded block lasts 3 minutes for the Pro plan
+            else:
+                # Exit for unknown errors
+                sys.exit(1)
 
         logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(pair['price'], pair['RSI']))
 
+        # NOTE: this iterates for each position symbol
         close_if_needed(symbol, pair['price'], pair['RSI'])
 
         # Only consider pairs meeting the price signal
         if pair['RSI'] >= RSI_MAX or pair['RSI'] <= RSI_MIN:
-            pair['strength'] = abs(50 - pair['RSI'])   # priority metric
+            pair['strength'] = abs(50 - pair['RSI'])   # priority metric; strength is key ;)
             potential.append(pair)
 
-        # Been getting some 429's from TAAPI lately
-        sleep(0.07)
+        # sleep(0.04)  # Avoid 429's from TAAPI
 
-    # Most extreme RSIs have priority (i.e. positions are opened first). Strength is key ;)
+    # Most extreme RSIs have priority (i.e. positions are opened first)
     potential.sort(key=lambda k: k['strength'], reverse=True)
 
     return potential
 
 
 def close_if_needed(symbol, price, RSI):
-    '''Close a position if SL or TP has been hit or there is a closing price signal.'''
+    '''Close a position if its SL, TP, or a corresponding price signal has been hit.'''
     global allocated, account, pnl, wins, loses
 
     opened = False
@@ -129,8 +137,9 @@ def close_if_needed(symbol, price, RSI):
             pnl[0] += position['pnl'][0]                      # Record net p&l (percentage)
             pnl[1] += position['pnl'][1]                      # Idem           (USDT)
 
-            logger.warning('{} Closed {} {} at {}! P&L is {:0.2f}%, ${:0.2f}'.format(
-                emojis[position['pnl'][0] >= 0], position['symbol'], position['side'], position['exit_price'], position['pnl'][0], position['pnl'][1]
+            logger.warning('{} Closed {} {} at {}. P&L: {:0.2f}%, ${:0.2f}'.format(
+                emojis[position['pnl'][0] >= 0], position['symbol'], position['side'],
+                position['exit_price'], position['pnl'][0], position['pnl'][1]
             ))
             logger.info('💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}'.format(account+allocated, allocated))
 
@@ -139,8 +148,8 @@ def close_if_needed(symbol, price, RSI):
             elif take_profit_hit:
                 logger.info('🤝 TP hit')
 
-            logger.info('💸 Total realized P&L is {:0.2f}%, ${:0.2f}'.format(pnl[0], pnl[1]))
-            logger.info('🤑 Wins: %d\t 🤔 Loses: %d' % (wins, loses))
+            logger.info('💸 Total realized P&L: {:0.2f}%, ${:0.2f}'.format(pnl[0], pnl[1]))
+            logger.info('🤑 Wins: %d\t\t 🤔 Loses: %d' % (wins, loses))
 
             with open('%s-closed' % logfile, 'a') as fd:
                 fd.write(json.dumps(position, indent=4) + '\n')
@@ -196,7 +205,7 @@ if __name__ == '__main__':
 
     # Use debug() for writing to STDOUT but NOT to logfile
     logger.add(logfile, format="{time:MM-DD HH:mm:ss.SSS} | {message}", level="INFO")
-    logger.add(sys.stderr, colorize=True, format="<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{message}</level>")
+    logger.add(sys.stdout, colorize=True, format="<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{message}</level>")
 
     logger.debug('Logging at: %s' % logfile)
 

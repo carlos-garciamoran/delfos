@@ -99,18 +99,22 @@ def get_prices():
     resp = s.get(endpoint)
     dump = resp.json()
 
+    # Basic error checking
+    if resp.status_code != 200:
+        return prices, resp.status_code, resp.text
+
     # Parse the price for each interesting symbol
     for pair in dump:
         if pair['symbol'][-4:] != 'USDT' or pair['symbol'] in NON_TRADED_SYMBOLS or \
-           'BULL' in pair['symbol'] or 'BEAR' in pair['symbol'] or \
-           'UP' in pair['symbol'] or 'DOWN' in pair['symbol']:
+        'BULL' in pair['symbol'] or 'BEAR' in pair['symbol'] or \
+        'UP' in pair['symbol'] or 'DOWN' in pair['symbol']:
             # Skip uninsteresting symbols
             continue
 
         pair['price'] = float(pair['price'])
         prices.append(pair)
 
-    return prices, resp.status_code
+    return prices, resp.status_code, None
 
 
 # TODO: parse used JSON objects
