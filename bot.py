@@ -68,25 +68,26 @@ def scan(pairs):
         # API error checking
         if code != 200:
             logger.error('[!] TAAPI %d' % code)
-            logger.error(error)  # NOTE: for testing purposes
 
             # Bad client request. Most likely a dead coin still listed in Binance
             if code == 400:
                 logger.error('[!] Found potential dead coin: ' + coin)
                 continue
             # These codes are odd but happen, we just ignore them. 500's return an empty body
-            elif code == 500 or code == 502:
+            elif code == 500 or code == 502 or code == 504:
                 continue
             elif code == 429:
-                sleep(180)  # The rate-limit-exceeded block lasts 3 minutes for the Pro plan
+                logger.error(error)
+                sleep(90)  # The rate-limit-exceeded block lasts 3 minutes for the Pro plan
             else:
                 # Exit for unknown errors
+                logger.error(error)
                 sys.exit(1)
 
         logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(pair['price'], pair['RSI']))
 
         # NOTE: this iterates for each position symbol
-        close_if_needed(symbol, pair['price'], pair['RSI'])
+        close_if_needed(pair)
 
         # Only consider pairs meeting the price signal
         if pair['RSI'] >= RSI_MAX or pair['RSI'] <= RSI_MIN:
@@ -101,15 +102,16 @@ def scan(pairs):
     return potential
 
 
-def close_if_needed(symbol, price, RSI):
-    """Close a position if its SL, TP, or a corresponding price signal has been hit."""
+def close_if_needed(pair):
+    """Given a pair, close its position if its SL, TP, or a price signal has been hit."""
     global account, allocated, pnl, wins, loses
 
     opened = False
+    price = pair['price']
 
     # Search for an existing position for the given symbol.
     for position in positions:
-        if position['symbol'] == symbol:
+        if position['symbol'] == pair['symbol']:
             opened = True
             break
 
@@ -122,8 +124,8 @@ def close_if_needed(symbol, price, RSI):
             stop_loss_hit   = price >= position['stop_loss']
             take_profit_hit = price <= position['take_profit']
 
-        # Strategy is called here. Always returns either true or false.
-        price_signal_hit = evaluate_RSI(position, price, RSI)
+        # Always returns either true or false.
+        price_signal_hit = evaluate_RSI(position, pair)
 
         needs_to_close = price_signal_hit or stop_loss_hit or take_profit_hit
 
@@ -138,8 +140,8 @@ def close_if_needed(symbol, price, RSI):
 
             allocated -= position['size']                     # Adjust allocated capital
             account += position['size'] + position['pnl'][1]  # Recompound magic, baby
-            pnl[0] += position['pnl'][0]                      # Record net p&l (percentage)
-            pnl[1] += position['pnl'][1]                      # Idem           (USDT)
+            pnl[0] += position['pnl'][0]   # Record net p&l (percentage)
+            pnl[1] += position['pnl'][1]   # Idem           (USDT)
 
             logger.warning('{} Closed {} {} at {}. P&L: {:0.2f}%, ${:0.2f}'.format(
                 emojis[position['pnl'][0] >= 0], position['symbol'], position['side'],
@@ -154,7 +156,9 @@ def close_if_needed(symbol, price, RSI):
             elif take_profit_hit:
                 logger.info('🤝 TP hit')
 
-            logger.info('💸 Total realized P&L: {:0.2f}%, ${:0.2f}'.format(pnl[0], pnl[1]))
+            logger.info('💸 Total realized P&L: {:0.2f}%, ${:0.2f}'.format(
+                pnl[0], pnl[1]
+            ))
             logger.info('🤑 Wins: %d\t\t 🤔 Loses: %d' % (wins, loses))
 
             with open('%s-closed.log' % logfile, 'a') as fd:
