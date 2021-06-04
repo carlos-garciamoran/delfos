@@ -1,11 +1,11 @@
 import hmac
 import time
 import datetime
+from requests import Session
+from urllib import parse as urllib
 
 from dotenv import dotenv_values, load_dotenv
 from loguru import logger
-from requests import Session
-from urllib import parse as urllib
 
 from constants import *
 
@@ -24,7 +24,7 @@ s.headers.update({ 'X-MBX-APIKEY': APIKEY })
 
 
 def get_all_coins_info():
-    '''Get information of coins (available for deposit and withdraw). Weight: 1.'''
+    """Get information of coins (available for deposit and withdraw). Weight: 1."""
     endpoint = SAPI + '/capital/config/getall'
 
     params = sign_timestamp()
@@ -34,7 +34,7 @@ def get_all_coins_info():
 
 
 def get_USDT_capital():
-    '''Get the available USDT spot capital. Return -1 if the API didn't return an HTTP 200.'''
+    """Get the available USDT spot capital. Return -1 if the API didn't return an HTTP 200."""
     assets, code = get_all_coins_info()
 
     if code != 200:
@@ -47,7 +47,7 @@ def get_USDT_capital():
 
 # NOTE: unused; TODO: parse used JSON objects
 def get_account_info():
-    '''Get current account information. Weight: 10'''
+    """Get current account information. Weight: 10"""
     endpoint = V3 + '/account'
 
     params = sign_timestamp()
@@ -92,7 +92,7 @@ def get_price(symbol):
 
 
 def get_prices():
-    '''Get all symbol prices and filter them. Weight: 2.'''
+    """Get all symbol prices and filter them. Weight: 2."""
     prices = []
     endpoint = V3 + '/ticker/price'
 
@@ -119,7 +119,7 @@ def get_prices():
 
 # TODO: parse used JSON objects
 def open_limit_order(symbol, side, entry_price, size):
-    '''Send in a new limit order. Weight: 1.'''
+    """Send in a new limit order. Weight: 1."""
     endpoint = V3 + '/order'
 
     order = {
@@ -143,7 +143,7 @@ def open_limit_order(symbol, side, entry_price, size):
 
 # TODO: parse used JSON objects
 def close_limit_order(order, exit_price):
-    '''Close an existing limit order. Weight: 1.'''
+    """Close an existing limit order. Weight: 1."""
     endpoint = V3 + '/order'
 
     # TODO: retrieve order
@@ -196,7 +196,7 @@ def close_order(position, exit_price):
 
 
 def sign_timestamp():
-    '''Sign millisecond timestamp with HMAC256 signature using Binance API's secret key.'''
+    """Sign millisecond timestamp with HMAC256 signature using Binance API's secret key."""
 
     # Convert UNIX time from seconds to milliseconds
     params = { 'timestamp': int(time.time() * 1000) }

@@ -6,11 +6,16 @@ TAKE_PROFIT = 0.07   # idem
 RSI_MAX = 75
 RSI_MIN = 25
 
-# TODO: implement into strategy
-RSI_BUY_OPEN = 30
-RSI_BUY_CLOSE = 80
-RSI_SELL_OPEN = 70
-RSI_SELL_CLOSE = 20
+RSI_BUY_OPEN = 20
+RSI_BUY_CLOSE = 70
+RSI_SELL_OPEN = 80
+RSI_SELL_CLOSE = 30
+
+# Strategies to run simultaneously as defined in strategies.py
+STRATEGIES = [
+    'evaluate_RSI',
+    'evaluate_flexible_RSI',
+]
 
 # Blacklist of symbols ignored
 NON_TRADED_SYMBOLS = [
@@ -33,6 +38,7 @@ NON_TRADED_SYMBOLS = [
     'HC',
     'MCO',
     'NPXS',
+    'NU',
     'PXS',
     'STORM',
     'STRAT',

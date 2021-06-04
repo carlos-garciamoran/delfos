@@ -37,7 +37,7 @@ def main():
             return
 
         # Stores an object for each pair made up of [symbol, price, RSI, strength]
-        potential = scan(pairs)  # Takes ~16 secs to scan 223 pairs
+        potential = scan(pairs)
 
         logger.debug('🔎 Found %d potential positions' % len(potential))
         logger.info(potential)
@@ -46,14 +46,14 @@ def main():
 
 
 def scan(pairs):
-    '''Fetch RSI, close positions which need so, and store pairs matching price signal for post-ordering.'''
+    """Fetch RSIs, close positions which need so, and store pairs matching price signal for potential positions."""
     potential = []
 
     # For each pair, fetch its RSI and check if its position should be closed.
     for pair in pairs:
         symbol = pair['symbol']
 
-        # TODO: refactor without using .find()
+        # NOTE: should refactor without using .find()
         coin = symbol[:symbol.find('USDT')]
         t_symbol = '{}/{}'.format(coin, symbol[-4:])
 
@@ -67,14 +67,17 @@ def scan(pairs):
 
         # API error checking
         if code != 200:
-            logger.error('[!] Got %d from TAAPI' % code)
-            logger.error(error)
+            logger.error('[!] TAAPI %d' % code)
+            logger.error(error)  # NOTE: for testing purposes
 
-            # 500 responses from TAAPI come with an empty body
-            if code == 400 or code == 500:
+            # Bad client request. Most likely a dead coin still listed in Binance
+            if code == 400:
+                logger.error('[!] Found potential dead coin: ' + coin)
+                continue
+            # These codes are odd but happen, we just ignore them. 500's return an empty body
+            elif code == 500 or code == 502:
                 continue
             elif code == 429:
-                logger.warning("[!] Got 429 from TAAPI")
                 sleep(180)  # The rate-limit-exceeded block lasts 3 minutes for the Pro plan
             else:
                 # Exit for unknown errors
@@ -99,8 +102,8 @@ def scan(pairs):
 
 
 def close_if_needed(symbol, price, RSI):
-    '''Close a position if its SL, TP, or a corresponding price signal has been hit.'''
-    global allocated, account, pnl, wins, loses
+    """Close a position if its SL, TP, or a corresponding price signal has been hit."""
+    global account, allocated, pnl, wins, loses
 
     opened = False
 
@@ -111,6 +114,7 @@ def close_if_needed(symbol, price, RSI):
             break
 
     if opened:
+        # Stop loss and take profit are the same for all strategies.
         if position['side'] == 'BUY':
             stop_loss_hit   = price <= position['stop_loss']
             take_profit_hit = price >= position['take_profit']
@@ -141,7 +145,9 @@ def close_if_needed(symbol, price, RSI):
                 emojis[position['pnl'][0] >= 0], position['symbol'], position['side'],
                 position['exit_price'], position['pnl'][0], position['pnl'][1]
             ))
-            logger.info('💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}'.format(account+allocated, allocated))
+            logger.info('💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}'.format(
+                account+allocated, allocated
+            ))
 
             if stop_loss_hit:
                 logger.info('🚫 SL hit')
@@ -151,12 +157,12 @@ def close_if_needed(symbol, price, RSI):
             logger.info('💸 Total realized P&L: {:0.2f}%, ${:0.2f}'.format(pnl[0], pnl[1]))
             logger.info('🤑 Wins: %d\t\t 🤔 Loses: %d' % (wins, loses))
 
-            with open('%s-closed' % logfile, 'a') as fd:
+            with open('%s-closed.log' % logfile, 'a') as fd:
                 fd.write(json.dumps(position, indent=4) + '\n')
 
 
 def open_positions(potential):
-    '''Open positions based on RSI strength. Ensure no more than 1 position per symbol is opened'''
+    """Open positions based on RSI strength. Ensure no more than 1 position per symbol is opened."""
     global allocated, account, pnl, wins, loses
 
     # NOTE: expensive op: O(N) growth, where N=len(positions)
@@ -190,7 +196,7 @@ def open_positions(potential):
                 account, allocated, len(positions)
             ))
 
-            with open('%s-positions' % logfile, 'a') as fd:
+            with open('%s-opened.log' % logfile, 'a') as fd:
                 fd.write(json.dumps(position, indent=4) + '\n')
 
 
@@ -199,15 +205,15 @@ if __name__ == '__main__':
         print('[!] Need to provide a log file as argv, exiting...')
         sys.exit(1)
 
-    logfile = sys.argv[1] + '.log'
+    logfile = sys.argv[1]
 
     logger.remove()
 
     # Use debug() for writing to STDOUT but NOT to logfile
-    logger.add(logfile, format="{time:MM-DD HH:mm:ss.SSS} | {message}", level="INFO")
+    logger.add(logfile + '.log', format="{time:MM-DD HH:mm:ss.SSS} | {message}", level="INFO")
     logger.add(sys.stdout, colorize=True, format="<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{message}</level>")
 
-    logger.debug('Logging at: %s' % logfile)
+    logger.debug('Logging at: %s.log' % logfile)
 
     # TODO: start logging price when position is opened
     logger.info('ACCOUNT_RISK: %0.2f' % ACCOUNT_RISK)
