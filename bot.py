@@ -69,12 +69,12 @@ def scan(pairs):
         if code != 200:
             logger.error('[!] TAAPI %d' % code)
 
-            # Bad client request. Most likely a dead coin still listed in Binance
+            # Bad request. Most likely a dead coin still listed in Binance
             if code == 400:
                 logger.error('[!] Found potential dead coin: ' + coin)
                 continue
             # These codes are odd but happen, we just ignore them. 500's return an empty body
-            elif code == 500 or code == 502 or code == 504:
+            elif code == 500 or code == 502 or code == 504 or code == 524:
                 continue
             elif code == 429:
                 logger.error(error)
@@ -161,8 +161,7 @@ def close_if_needed(pair):
             ))
             logger.info('🤑 Wins: %d\t\t 🤔 Loses: %d' % (wins, loses))
 
-            with open('%s-closed.log' % logfile, 'a') as fd:
-                fd.write(json.dumps(position, indent=4) + '\n')
+            log_to_json(position)
 
 
 def open_positions(potential):
@@ -200,8 +199,23 @@ def open_positions(potential):
                 account, allocated, len(positions)
             ))
 
-            with open('%s-opened.log' % logfile, 'a') as fd:
-                fd.write(json.dumps(position, indent=4) + '\n')
+            log_to_json()
+
+
+def log_to_json(position=None):
+    if position:
+        with open('%s-closed.json' % logfile, 'r+') as fd:
+            data = fd.read()
+            closed = json.loads(data) + [position]
+            fd.seek(0)
+            fd.write(json.dumps(closed, indent=4) + '\n')
+            fd.truncate()
+
+        return
+
+    # If no argument passed, dump all open positions
+    with open('%s-opened.json' % logfile, 'w') as fd:
+        fd.write(json.dumps(positions, indent=4) + '\n')
 
 
 if __name__ == '__main__':
@@ -224,10 +238,11 @@ if __name__ == '__main__':
     logger.info('STOP_LOSS: %0.2f\tTAKE_PROFIT: %0.2f' % (STOP_LOSS, TAKE_PROFIT))
     logger.info('RSI_MAX: %d\tRSI_MIN: %d' % (RSI_MAX, RSI_MIN))
 
+    # Initialise closed positions JSON file
+    with open('%s-closed.json' % logfile, 'w') as fd:
+        fd.write('[]\n')
+
     try:
         main()
     except KeyboardInterrupt:
         logger.info('Heard CTRL-C, quitting...')
-    # except Exception as e:
-    #     logger.error('Unknown error: quitting...')
-    #     logger.error(e)
