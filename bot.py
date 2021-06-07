@@ -37,9 +37,6 @@ def main():
         # 2D array. Rows store an object for each pair made up of [symbol, price, RSI, strength]
         scan(pairs)
 
-        # logger.debug('🔎 Found %d potential positions' % len(potential))
-        # logger.info(potential)
-
         open_positions()
 
 
@@ -89,11 +86,12 @@ def scan(pairs):
             account, strategy = accounts[i], STRATEGIES[i]
 
             # NOTE: this iterates for each position symbol
-            close_if_needed(account, strategy, pair)
+            account = close_if_needed(account, strategy, pair)
 
             if eval(strategy['is_interesting'])(pair):
                 pair['strength'] = eval(strategy['compute_strength'])(pair)
                 account['potential'].append(pair)
+                logger.debug('🔎 Added %s to potential positions (%s)' % (pair['symbol'], strategy['is_interesting']))
 
             accounts[i] = account
         # sleep(0.04)  # Avoid 429's from TAAPI
@@ -144,10 +142,13 @@ def close_if_needed(account, strategy, pair):
 
             account['allocated'] -= position['size']  # Adjust allocated capital
             account['available'] += position['size'] + position['pnl'][1]  # Recompound magic, baby
-            account[0] += position['pnl'][0]         # Record net p&l (percentage)
-            account['pnl'][1] += position['pnl'][1]  # Idem           (USDT)
 
-            logger.warning('🔮 Strat ' + strategy['is_interesting'])
+            account['pnl'] += position['pnl'][1]  # Update net p&l in USDT
+
+            # Percentage increase = (final_value - starting_value) / starting_value * 100
+            percentage = (account['available'] + account['allocated'] - ACCOUNT_SIZE) / ACCOUNT_SIZE * 100
+
+            logger.warning('🔮 Strat: ' + strategy['is_interesting'])
             logger.warning('{} Closed {} {} at {}. P&L: {:0.2f}%, ${:0.2f}'.format(
                 emojis[position['pnl'][0] >= 0], position['symbol'], position['side'],
                 position['exit_price'], position['pnl'][0], position['pnl'][1]
@@ -162,13 +163,13 @@ def close_if_needed(account, strategy, pair):
                 logger.info('🤝 TP hit')
 
             logger.info('💸 Total realized P&L: {:0.2f}%, ${:0.2f}'.format(
-                account['pnl'][0], account['pnl'][1]
+                percentage, account['pnl']
             ))
             logger.info('🤑 Wins: %d\t\t 🤔 Loses: %d' % (account['wins'], account['loses']))
 
             log_to_json(account, position)
 
-            accounts[i] = account
+    return account
 
 
 def open_positions():
@@ -191,8 +192,7 @@ def open_positions():
 
             # This check is needed in the edge case of `ACCOUNT_RISK > STOP_LOSS`
             if position_size <= account['available']:
-                # By this point there is a price signal (RSI is either >= RSI_MAX or <= RSI_MIN due to scan() filtering)
-                # BUY/SELL is the naming convention used by Binance, as opposed to bullish/bearish
+                # By this point there is a price signal due to scan() filtering via strategy['is_interesting']
                 side = eval(strategy['get_side'])(pair)
 
                 position = new_order(pair['symbol'], side, pair['price'], position_size)
@@ -251,8 +251,8 @@ if __name__ == '__main__':
     logger.info('Logging at: sessions/%s/' % session)
 
     logger.info('ACCOUNT_RISK: %0.2f' % ACCOUNT_RISK)
+    logger.info('ACCOUNT_SIZE: %0.2f' % ACCOUNT_SIZE)
     logger.info('STOP_LOSS: %0.2f\tTAKE_PROFIT: %0.2f' % (STOP_LOSS, TAKE_PROFIT))
-    logger.info('RSI_MAX: %d\tRSI_MIN: %d' % (RSI_MAX, RSI_MIN))
 
     # Create 1 dedicated account and directory for each trading strategy
     for strategy in STRATEGIES:
@@ -267,14 +267,14 @@ if __name__ == '__main__':
             fd2.write('[]\n')
 
         accounts.append({
-            'allocated' : 0.0,         # capital allocated in positions
-            'available' : 1000.0,      # liquid unused capital + (realized) pnl
-            'pnl'       : [0.0, 0.0],  # total realized and recompounded profit & loss [percentage, USDT]
-            'positions' : [],          # stores the objects of the open positions
-            'potential' : [],          # stores the objects of potential positions to be opened
-            'loses' : 0,               # counters of trades with profits and loses
-            'wins': 0,                 # idem
-            'strategy': strategy       # strategy name
+            'strategy': strategy,        # strategy name
+            'allocated' : 0.0,           # capital allocated in positions
+            'available' : ACCOUNT_SIZE,  # liquid unused capital + (realized) pnl
+            'positions' : [],  # objects of the open positions
+            'potential' : [],  # objects of potential positions to be opened
+            'pnl' : 0.0,  # total realized and recompounded profit & loss in USDT
+            'loses' : 0,  # counter of profitable trades
+            'wins': 0,    # counter of unprofitable trades
         })
 
     logger.info('ℹ️  Loaded %d strategies' % len(STRATEGIES))
