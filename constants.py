@@ -13,8 +13,12 @@ RSI_SELL_CLOSE = 30
 
 # Strategies to run simultaneously as defined in strategies.py
 STRATEGIES = [
-    'evaluate_RSI',
-    'evaluate_flexible_RSI',
+    {
+        'is_interesting': 'hits_RSI_max_min',
+        'compute_strength': 'compute_RSI_strength',
+        'should_close': 'evaluate_RSI',
+        'get_side': 'determine_RSI_side',
+    }
 ]
 
 # Blacklist of symbols ignored
@@ -28,7 +32,8 @@ NON_TRADED_SYMBOLS = [
     'USDS',
     'USDSB',
 
-    # Dead coins on Binance
+    # Dead coins on Binance / Not recognised by TAAPI
+    'ATA',
     'BCC',
     'BCHABC',
     'BCHSV',
