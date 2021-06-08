@@ -1,4 +1,4 @@
-from constants import *
+from utils.constants import *
 
 
 def hits_RSI_20_80(pair):
@@ -13,12 +13,14 @@ def compute_RSI_strength(pair):
     """Calculate the strength of the pair's RSI."""
     return abs(50 - pair['RSI'])
 
-def evaluate_RSI(position, pair):
+def evaluate_RSI(position, pair, strategy):
     """Return True if the RSI is overbought in a BUY position or oversold in a SELL position."""
+    _max, _min = (80, 20) if strategy == 'hits_RSI_20_80' else (70, 30)
+
     if position['side'] == 'BUY':
-        should_close = pair['RSI'] >= 50 and pair['price'] >= position['entry_price']
+        should_close = pair['RSI'] >= _max and pair['price'] >= position['entry_price']
     else:
-        should_close = pair['RSI'] <= 50 and pair['price'] <= position['entry_price']
+        should_close = pair['RSI'] <= _min and pair['price'] <= position['entry_price']
 
     return should_close
 

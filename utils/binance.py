@@ -7,7 +7,7 @@ from urllib import parse as urllib
 from dotenv import dotenv_values, load_dotenv
 from loguru import logger
 
-from constants import *
+from utils.constants import *
 
 
 load_dotenv()
@@ -154,45 +154,6 @@ def close_limit_order(order, exit_price):
     resp = s.post(endpoint, data=order)
 
     return resp.json(), resp.status_code
-
-
-def new_order(symbol, side, entry_price, size):
-    if side == 'BUY':
-        stop_loss   = entry_price - (entry_price * STOP_LOSS)
-        take_profit = entry_price + (entry_price * TAKE_PROFIT)
-    else:
-        stop_loss   = entry_price + (entry_price * STOP_LOSS)
-        take_profit = entry_price - (entry_price * TAKE_PROFIT)
-
-    position = {
-        'symbol': symbol,
-        'side': side,
-        'size': size,
-        'entry_price': entry_price,
-        'exit_price': None,
-        'stop_loss': stop_loss,
-        'take_profit': take_profit,
-        'pnl': [None, None],   # [%, USDT]
-        'opened_at': datetime.datetime.now().isoformat(),
-        'closed_at': None,
-    }
-
-    return position
-
-
-def close_order(position, exit_price):
-    position['exit_price'] = exit_price
-    position['closed_at']  = datetime.datetime.now().isoformat()
-
-    if position['side'] == 'BUY':
-        position['pnl'][0] = (exit_price - position['entry_price']) / position['entry_price']
-    else:
-        position['pnl'][0] = (position['entry_price'] - exit_price) / exit_price
-
-    position['pnl'][0] *= 100
-    position['pnl'][1] = position['size'] * position['pnl'][0] / 100
-
-    return position
 
 
 def sign_timestamp():

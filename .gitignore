@@ -131,6 +131,4 @@ dmypy.json
 # Misc
 logs/
 sessions/
-*.log
-*.json
-delfosbot.py
+telegram_bot.py

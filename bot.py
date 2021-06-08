@@ -7,10 +7,11 @@ from time import sleep
 
 from loguru import logger
 
-from binance import *
-from constants import *
-from indicators import *
-from strategies import *
+import utils.binance as binance
+import utils.emulator as emulator
+import utils.taapi as taapi
+from utils.constants import *
+from utils.strategies import *
 
 
 accounts = []
@@ -26,7 +27,7 @@ def main():
         logger.debug('📡 Hitting Binance...')
 
         # Fetch prices from Binance USDT pairs and the request's HTTP status code
-        pairs, code, error = get_prices()
+        pairs, code, error = binance.get_prices()
 
         # API error checking
         if code != 200:
@@ -34,7 +35,6 @@ def main():
             logger.error(error)
             return
 
-        # 2D array. Rows store an object for each pair made up of [symbol, price, RSI, strength]
         scan(pairs)
 
         open_positions()
@@ -42,8 +42,6 @@ def main():
 
 def scan(pairs):
     """Fetch RSIs, close positions which need so, and store pairs matching price signal for potential positions."""
-    potential = []
-
     # For each pair, fetch its RSI and check if its position should be closed.
     for pair in pairs:
         symbol = pair['symbol']
@@ -56,7 +54,7 @@ def scan(pairs):
 
         # Catch odd error related to openssl socket connection
         try:
-            pair['RSI'], code, error = get_RSI(t_symbol)
+            pair['RSI'], code, error = taapi.get_RSI(t_symbol)
         except OSError:
             continue
 
@@ -91,7 +89,7 @@ def scan(pairs):
             if eval(strategy['is_interesting'])(pair):
                 pair['strength'] = eval(strategy['compute_strength'])(pair)
                 account['potential'].append(pair)
-                logger.debug('🔎 Added %s to potential positions (%s)' % (pair['symbol'], strategy['is_interesting']))
+                logger.debug('   🔎 Found %s as potential - %s' % (pair['symbol'], strategy['is_interesting']))
 
             accounts[i] = account
         # sleep(0.04)  # Avoid 429's from TAAPI
@@ -101,13 +99,13 @@ def scan(pairs):
         account = accounts[i]
         # Most extreme RSIs have priority (i.e. positions are opened first)
         account['potential'].sort(key=lambda k: k['strength'], reverse=True)
+        logger.debug('Potential: ')
+        logger.debug(account['potential'])
         accounts[i] = account
 
 
 def close_if_needed(account, strategy, pair):
     """Given a pair, close its position if its SL, TP, or a price signal has been hit."""
-    # global account, allocated, pnl, wins, loses
-
     opened = False
     price = pair['price']
 
@@ -127,12 +125,12 @@ def close_if_needed(account, strategy, pair):
             take_profit_hit = price <= position['take_profit']
 
         # Always returns either true or false.
-        price_signal_hit = eval(strategy['should_close'])(position, pair)
+        price_signal_hit = eval(strategy['should_close'])(position, pair, strategy['is_interesting'])
 
         needs_to_close = price_signal_hit or stop_loss_hit or take_profit_hit
 
         if needs_to_close:
-            position = close_order(position, price)
+            position = emulator.close_order(position, price)
             account['positions'].remove(position)
 
             if position['pnl'][0] >= 0:
@@ -182,6 +180,9 @@ def open_positions():
         # NOTE: expensive op: O(N) growth, where N=len(positions)
         open_symbols = list(map(lambda p: p['symbol'], account['positions']))
 
+        logger.debug('open_symbols')
+        logger.debug(open_symbols)
+
         for pair in account['potential']:
             # Do not open a new position if there's an existing position (based on the symbol)
             if pair['symbol'] in open_symbols:
@@ -195,7 +196,7 @@ def open_positions():
                 # By this point there is a price signal due to scan() filtering via strategy['is_interesting']
                 side = eval(strategy['get_side'])(pair)
 
-                position = new_order(pair['symbol'], side, pair['price'], position_size)
+                position = emulator.new_order(pair['symbol'], side, pair['price'], position_size)
                 account['positions'].append(position)
 
                 account['available'] -= position_size    # Remove the position size from the available capital
@@ -212,7 +213,10 @@ def open_positions():
 
                 log_to_json(account)
 
-                accounts[i] = account
+        # All potential positions have been opened so reset the array for the next round
+        account['potential'] = []
+
+        accounts[i] = account
 
 
 def log_to_json(account, position=None):
@@ -271,7 +275,7 @@ if __name__ == '__main__':
             'allocated' : 0.0,           # capital allocated in positions
             'available' : ACCOUNT_SIZE,  # liquid unused capital + (realized) pnl
             'positions' : [],  # objects of the open positions
-            'potential' : [],  # objects of potential positions to be opened
+            'potential' : [],  # objects of potential positions to be opened: [symbol, price, RSI, strength]
             'pnl' : 0.0,  # total realized and recompounded profit & loss in USDT
             'loses' : 0,  # counter of profitable trades
             'wins': 0,    # counter of unprofitable trades
