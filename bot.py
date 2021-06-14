@@ -15,7 +15,6 @@ from utils.strategies import *
 
 
 accounts = []
-
 emojis = {
     True:  '💎', False:  '❌',
     'BUY': '🐃', 'SELL': '🐻',
@@ -26,8 +25,14 @@ def main():
     while True:
         logger.debug('📡 Hitting Binance...')
 
-        # Fetch prices from Binance USDT pairs and the request's HTTP status code
-        pairs, code, error = binance.get_prices()
+        # Catch odd error related to openssl socket connection
+        try:
+            # Fetch prices from Binance USDT pairs and the request's HTTP status code
+            pairs, code, error = binance.get_prices()
+        except OSError as e:
+            logger.error('[!] Crashed on Binance request, dumping error...')
+            logger.error(e)
+            continue
 
         # API error checking
         if code != 200:
@@ -55,7 +60,9 @@ def scan(pairs):
         # Catch odd error related to openssl socket connection
         try:
             pair['RSI'], code, error = taapi.get_RSI(t_symbol)
-        except OSError:
+        except (KeyError, OSError) as e:
+            logger.error('[!] Crashed on TAAPI request, dumping error...')
+            logger.error(e)
             continue
 
         # API error checking
@@ -89,18 +96,15 @@ def scan(pairs):
             if eval(strategy['is_interesting'])(pair):
                 pair['strength'] = eval(strategy['compute_strength'])(pair)
                 account['potential'].append(pair)
-                logger.debug('   🔎 Found %s as potential - %s' % (pair['symbol'], strategy['is_interesting']))
 
             accounts[i] = account
         # sleep(0.04)  # Avoid 429's from TAAPI
 
-    # For each account, sort all potential positions
+    # For each account, sort all potential positions in terms of strength
     for i in range(len(accounts)):
         account = accounts[i]
         # Most extreme RSIs have priority (i.e. positions are opened first)
         account['potential'].sort(key=lambda k: k['strength'], reverse=True)
-        logger.debug('Potential: ')
-        logger.debug(account['potential'])
         accounts[i] = account
 
 
@@ -172,16 +176,11 @@ def close_if_needed(account, strategy, pair):
 
 def open_positions():
     """Open positions based on RSI strength. Ensure no more than 1 position per symbol is opened."""
-    # global allocated, account, pnl, wins, loses
-
     for i in range(len(STRATEGIES)):
         account, strategy = accounts[i], STRATEGIES[i]
 
         # NOTE: expensive op: O(N) growth, where N=len(positions)
         open_symbols = list(map(lambda p: p['symbol'], account['positions']))
-
-        logger.debug('open_symbols')
-        logger.debug(open_symbols)
 
         for pair in account['potential']:
             # Do not open a new position if there's an existing position (based on the symbol)

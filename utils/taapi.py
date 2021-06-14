@@ -18,18 +18,12 @@ s.params.update({
 
 
 def get_RSI(symbol):
-    RSI = -1
     endpoint = URL + '/rsi'
     resp = s.get(endpoint, params={ 'symbol': symbol })
 
-    # Endpoint sometimes returns a 500
+    # TAAPI sometimes returns a 5xx's
     if resp.status_code == 200:
-        try:
-            RSI = resp.json()['value']
-        except KeyError:
-            logger.error('[!] Crashed on TAAPI parsing, dumping response...')
-            logger.error(resp.content)
-    else:
-        return -1, resp.status_code, resp.text
-
-    return RSI, resp.status_code, None
+        RSI = resp.json()['value']
+        return RSI, resp.status_code, None
+    
+    return -1, resp.status_code, resp.text

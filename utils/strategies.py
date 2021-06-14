@@ -1,6 +1,14 @@
 from utils.constants import *
 
 
+def hits_RSI_10_90(pair):
+    """Return True if the RSI is overbought or oversold."""
+    return pair['RSI'] >= 90 or pair['RSI'] <= 10
+
+def hits_RSI_15_85(pair):
+    """Return True if the RSI is overbought or oversold."""
+    return pair['RSI'] >= 85 or pair['RSI'] <= 15
+
 def hits_RSI_20_80(pair):
     """Return True if the RSI is overbought or oversold."""
     return pair['RSI'] >= 80 or pair['RSI'] <= 20
@@ -15,7 +23,7 @@ def compute_RSI_strength(pair):
 
 def evaluate_RSI(position, pair, strategy):
     """Return True if the RSI is overbought in a BUY position or oversold in a SELL position."""
-    _max, _min = (80, 20) if strategy == 'hits_RSI_20_80' else (70, 30)
+    _min, _max = int(strategy[9:11]), int(strategy[12:14])
 
     if position['side'] == 'BUY':
         should_close = pair['RSI'] >= _max and pair['price'] >= position['entry_price']
