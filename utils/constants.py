@@ -1,8 +1,8 @@
 ACCOUNT_RISK = 0.01  # risk taken per trade (e.g. 0.01 = 1% of account)
 ACCOUNT_SIZE = 1000.0  # initial account size in USDT
 
-STOP_LOSS = 0.04     # distance from entry price (e.g. 0.07 = 7% away)
-TAKE_PROFIT = 0.07   # idem
+STOP_LOSS = 0.03     # distance from entry price (e.g. 0.07 = 7% away)
+TAKE_PROFIT = 0.05   # idem
 
 RSI_MAX = 75
 RSI_MIN = 25
@@ -15,27 +15,31 @@ RSI_SELL_CLOSE = 30
 # Strategies to run simultaneously as defined in strategies.py
 STRATEGIES = [
     {
+        'name': 'RSI_30_70_raw',
         'is_interesting': 'hits_RSI_30_70',
         'compute_strength': 'compute_RSI_strength',
-        'should_close': 'evaluate_RSI',
+        'should_close': 'RSI_hit_opposite',
         'get_side': 'determine_RSI_side',
     },
     {
+        'name': 'RSI_30_70_with_profit',
+        'is_interesting': 'hits_RSI_30_70',
+        'compute_strength': 'compute_RSI_strength',
+        'should_close': 'RSI_hit_opposite_with_profit',
+        'get_side': 'determine_RSI_side',
+    },
+    {
+        'name': 'RSI_20_80_raw',
         'is_interesting': 'hits_RSI_20_80',
         'compute_strength': 'compute_RSI_strength',
-        'should_close': 'evaluate_RSI',
+        'should_close': 'RSI_hit_opposite',
         'get_side': 'determine_RSI_side',
     },
     {
-        'is_interesting': 'hits_RSI_15_85',
+        'name': 'RSI_20_80_with_profit',
+        'is_interesting': 'hits_RSI_20_80',
         'compute_strength': 'compute_RSI_strength',
-        'should_close': 'evaluate_RSI',
-        'get_side': 'determine_RSI_side',
-    },
-    {
-        'is_interesting': 'hits_RSI_10_90',
-        'compute_strength': 'compute_RSI_strength',
-        'should_close': 'evaluate_RSI',
+        'should_close': 'RSI_hit_opposite_with_profit',
         'get_side': 'determine_RSI_side',
     },
 ]

@@ -21,7 +21,18 @@ def compute_RSI_strength(pair):
     """Calculate the strength of the pair's RSI."""
     return abs(50 - pair['RSI'])
 
-def evaluate_RSI(position, pair, strategy):
+def RSI_hit_opposite(position, pair, strategy):
+    """Return True if the RSI is overbought in a BUY position or oversold in a SELL position."""
+    _min, _max = int(strategy[9:11]), int(strategy[12:14])
+
+    if position['side'] == 'BUY':
+        should_close = pair['RSI'] >= _max
+    else:
+        should_close = pair['RSI'] <= _min
+
+    return should_close
+
+def RSI_hit_opposite_with_profit(position, pair, strategy):
     """Return True if the RSI is overbought in a BUY position or oversold in a SELL position."""
     _min, _max = int(strategy[9:11]), int(strategy[12:14])
 

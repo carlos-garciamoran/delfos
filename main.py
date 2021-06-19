@@ -48,6 +48,9 @@ def main():
 def scan(pairs):
     """Fetch RSIs, close positions which need so, and store pairs matching price signal for potential positions."""
     # For each pair, fetch its RSI and check if its position should be closed.
+    global logged_symbols
+    logged_symbols = []
+
     for pair in pairs:
         symbol = pair['symbol']
 
@@ -72,10 +75,10 @@ def scan(pairs):
             # Bad request. Most likely a dead coin still listed in Binance
             if code == 400:
                 logger.error('[!] Found potential dead coin: ' + coin)
-                NON_TRADED_SYMBOLS.append(coin + 'USDT')
+                # NON_TRADED_SYMBOLS.append(coin + 'USDT')
                 continue
             # These codes are odd but happen, we just ignore them. 500's return an empty body
-            elif code == 500 or code == 502 or code == 504 or code == 524:
+            elif code == 500 or code == 502 or code == 504 or code == 524 or code == 525:
                 continue
             elif code == 429:
                 logger.error(error)
@@ -120,6 +123,13 @@ def close_if_needed(account, strategy, pair):
             break
 
     if opened:
+        # Log the pair, price, and RSI of the open asset.
+        if pair['symbol'] not in logged_symbols:
+            with open('intel.csv', 'a') as fd:
+                fd.write("%s,%f,%f\n" % (pair['symbol'], price, pair['RSI']))
+
+            logged_symbols.append(pair['symbol'])
+
         # Stop loss and take profit are the same for all strategies.
         if position['side'] == 'BUY':
             stop_loss_hit   = price <= position['stop_loss']
@@ -150,7 +160,7 @@ def close_if_needed(account, strategy, pair):
             # Percentage increase = (final_value - starting_value) / starting_value * 100
             percentage = (account['available'] + account['allocated'] - ACCOUNT_SIZE) / ACCOUNT_SIZE * 100
 
-            logger.warning('🔮 Strat: ' + strategy['is_interesting'])
+            logger.warning('🔮 Strat: ' + strategy['name'])
             logger.warning('{} Closed {} {} at {}. P&L: {:0.2f}%, ${:0.2f}'.format(
                 emojis[position['pnl'][0] >= 0], position['symbol'], position['side'],
                 position['exit_price'], position['pnl'][0], position['pnl'][1]
@@ -201,7 +211,7 @@ def open_positions():
                 account['available'] -= position_size    # Remove the position size from the available capital
                 account['allocated'] += position_size  # Add the position size to the allocated counter
 
-                logger.warning('🔮 Strat: ' + strategy['is_interesting'])
+                logger.warning('🔮 Strat: ' + strategy['name'])
                 logger.warning('{} Opened {} {} at {} with ${:0.2f}'.format(
                     emojis[side], pair['symbol'], side, pair['price'], position_size
                 ))
@@ -245,6 +255,9 @@ if __name__ == '__main__':
     Path('sessions/' + session).mkdir(parents=True, exist_ok=True)
     os.chdir('sessions/' + session)
 
+    with open('intel.csv', 'w') as fd:
+        fd.write("pair,price,RSI\n")
+
     logger.remove()
 
     # Use debug() for writing to STDOUT but NOT to logfile
@@ -259,7 +272,7 @@ if __name__ == '__main__':
 
     # Create 1 dedicated account and directory for each trading strategy
     for strategy in STRATEGIES:
-        strategy = strategy['is_interesting']
+        strategy = strategy['name']
 
         Path(strategy).mkdir(parents=True, exist_ok=True)
 

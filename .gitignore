@@ -131,4 +131,5 @@ dmypy.json
 # Misc
 logs/
 sessions/
+.vscode/
 telegram_bot.py
