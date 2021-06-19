@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import os
 import sys
+from datetime import datetime
 from time import sleep
 
 from loguru import logger
@@ -126,7 +127,7 @@ def close_if_needed(account, strategy, pair):
         # Log the pair, price, and RSI of the open asset.
         if pair['symbol'] not in logged_symbols:
             with open('intel.csv', 'a') as fd:
-                fd.write("%s,%f,%f\n" % (pair['symbol'], price, pair['RSI']))
+                fd.write("%s,%f,%f,%s\n" % (pair['symbol'], price, pair['RSI'], datetime.now()))
 
             logged_symbols.append(pair['symbol'])
 
@@ -256,7 +257,7 @@ if __name__ == '__main__':
     os.chdir('sessions/' + session)
 
     with open('intel.csv', 'w') as fd:
-        fd.write("pair,price,RSI\n")
+        fd.write("pair,price,RSI,timestamp\n")
 
     logger.remove()
 
