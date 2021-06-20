@@ -4,43 +4,35 @@ ACCOUNT_SIZE = 1000.0  # initial account size in USDT
 STOP_LOSS = 0.03     # distance from entry price (e.g. 0.07 = 7% away)
 TAKE_PROFIT = 0.05   # idem
 
-RSI_MAX = 75
-RSI_MIN = 25
-
 RSI_BUY_OPEN = 20
 RSI_BUY_CLOSE = 70
 RSI_SELL_OPEN = 80
 RSI_SELL_CLOSE = 30
 
-# Strategies to run simultaneously as defined in strategies.py
 STRATEGIES = [
     {
         'name': 'RSI_30_70_raw',
-        'is_interesting': 'hits_RSI_30_70',
-        'compute_strength': 'compute_RSI_strength',
-        'should_close': 'RSI_hit_opposite',
-        'get_side': 'determine_RSI_side',
+        'type': 'RSI',
+        'profit_close': False,
+        'constants': (30, 70),
     },
     {
-        'name': 'RSI_30_70_with_profit',
-        'is_interesting': 'hits_RSI_30_70',
-        'compute_strength': 'compute_RSI_strength',
-        'should_close': 'RSI_hit_opposite_with_profit',
-        'get_side': 'determine_RSI_side',
+        'name': 'RSI_30_70_profit',
+        'type': 'RSI',
+        'profit_close': True,
+        'constants': (30, 70),
     },
     {
         'name': 'RSI_20_80_raw',
-        'is_interesting': 'hits_RSI_20_80',
-        'compute_strength': 'compute_RSI_strength',
-        'should_close': 'RSI_hit_opposite',
-        'get_side': 'determine_RSI_side',
+        'type': 'RSI',
+        'profit_close': False,
+        'constants': (20, 80),
     },
     {
-        'name': 'RSI_20_80_with_profit',
-        'is_interesting': 'hits_RSI_20_80',
-        'compute_strength': 'compute_RSI_strength',
-        'should_close': 'RSI_hit_opposite_with_profit',
-        'get_side': 'determine_RSI_side',
+        'name': 'RSI_20_80_profit',
+        'type': 'RSI',
+        'profit_close': True,
+        'constants': (20, 80),
     },
 ]
 

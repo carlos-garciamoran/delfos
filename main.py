@@ -12,10 +12,11 @@ import utils.binance as binance
 import utils.emulator as emulator
 import utils.taapi as taapi
 from utils.constants import *
-from utils.strategies import *
+from utils.Strategy import Strategy
 
 
 accounts = []
+strategies = []
 emojis = {
     True:  '💎', False:  '❌',
     'BUY': '🐃', 'SELL': '🐻',
@@ -91,14 +92,14 @@ def scan(pairs):
 
         logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(pair['price'], pair['RSI']))
 
-        for i in range(len(STRATEGIES)):
-            account, strategy = accounts[i], STRATEGIES[i]
+        for i in range(len(strategies)):
+            account, strategy = accounts[i], strategies[i]
 
             # NOTE: this iterates for each position symbol
             account = close_if_needed(account, strategy, pair)
 
-            if eval(strategy['is_interesting'])(pair):
-                pair['strength'] = eval(strategy['compute_strength'])(pair)
+            if strategy.pair_is_interesting(pair):
+                pair['strength'] = strategy.compute_strength(pair)
                 account['potential'].append(pair)
 
             accounts[i] = account
@@ -140,7 +141,7 @@ def close_if_needed(account, strategy, pair):
             take_profit_hit = price <= position['take_profit']
 
         # Always returns either true or false.
-        price_signal_hit = eval(strategy['should_close'])(position, pair, strategy['is_interesting'])
+        price_signal_hit = strategy.should_close(position, pair)
 
         needs_to_close = price_signal_hit or stop_loss_hit or take_profit_hit
 
@@ -161,7 +162,7 @@ def close_if_needed(account, strategy, pair):
             # Percentage increase = (final_value - starting_value) / starting_value * 100
             percentage = (account['available'] + account['allocated'] - ACCOUNT_SIZE) / ACCOUNT_SIZE * 100
 
-            logger.warning('🔮 Strat: ' + strategy['name'])
+            logger.warning('🔮 Strat: ' + strategy.name)
             logger.warning('{} Closed {} {} at {}. P&L: {:0.2f}%, ${:0.2f}'.format(
                 emojis[position['pnl'][0] >= 0], position['symbol'], position['side'],
                 position['exit_price'], position['pnl'][0], position['pnl'][1]
@@ -187,8 +188,8 @@ def close_if_needed(account, strategy, pair):
 
 def open_positions():
     """Open positions based on RSI strength. Ensure no more than 1 position per symbol is opened."""
-    for i in range(len(STRATEGIES)):
-        account, strategy = accounts[i], STRATEGIES[i]
+    for i in range(len(strategies)):
+        account, strategy = accounts[i], strategies[i]
 
         # NOTE: expensive op: O(N) growth, where N=len(positions)
         open_symbols = list(map(lambda p: p['symbol'], account['positions']))
@@ -204,7 +205,7 @@ def open_positions():
             # This check is needed in the edge case of `ACCOUNT_RISK > STOP_LOSS`
             if position_size <= account['available']:
                 # By this point there is a price signal due to scan() filtering via strategy['is_interesting']
-                side = eval(strategy['get_side'])(pair)
+                side = strategy.determine_side(pair)
 
                 position = emulator.new_order(pair['symbol'], side, pair['price'], position_size)
                 account['positions'].append(position)
@@ -212,7 +213,7 @@ def open_positions():
                 account['available'] -= position_size    # Remove the position size from the available capital
                 account['allocated'] += position_size  # Add the position size to the allocated counter
 
-                logger.warning('🔮 Strat: ' + strategy['name'])
+                logger.warning('🔮 Strat: ' + strategy.name)
                 logger.warning('{} Opened {} {} at {} with ${:0.2f}'.format(
                     emojis[side], pair['symbol'], side, pair['price'], position_size
                 ))
@@ -272,19 +273,22 @@ if __name__ == '__main__':
     logger.info('STOP_LOSS: %0.2f\tTAKE_PROFIT: %0.2f' % (STOP_LOSS, TAKE_PROFIT))
 
     # Create 1 dedicated account and directory for each trading strategy
-    for strategy in STRATEGIES:
-        strategy = strategy['name']
+    for i in range(len(STRATEGIES)):
+        strategy = STRATEGIES[i]
+        strategy = Strategy(
+            strategy['name'], strategy['type'], strategy['profit_close'], strategy['constants']
+        )
 
-        Path(strategy).mkdir(parents=True, exist_ok=True)
+        Path(strategy.name).mkdir(parents=True, exist_ok=True)
 
         # Initialise JSON positions files
-        with open('%s/closed.json' % strategy, 'w') as fd1, \
-             open('%s/opened.json' % strategy, 'w') as fd2:
+        with open('%s/closed.json' % strategy.name, 'w') as fd1, \
+             open('%s/opened.json' % strategy.name, 'w') as fd2:
             fd1.write('[]\n')
             fd2.write('[]\n')
 
         accounts.append({
-            'strategy': strategy,        # strategy name
+            'strategy': strategy.name,   # strategy name
             'allocated' : 0.0,           # capital allocated in positions
             'available' : ACCOUNT_SIZE,  # liquid unused capital + (realized) pnl
             'positions' : [],  # objects of the open positions
@@ -294,7 +298,9 @@ if __name__ == '__main__':
             'wins': 0,    # counter of unprofitable trades
         })
 
-    logger.info('ℹ️  Loaded %d strategies' % len(STRATEGIES))
+        strategies.append(strategy)
+
+    logger.info('ℹ️  Loaded %d strategies' % len(strategies))
     logger.info(STRATEGIES)
 
     try:
