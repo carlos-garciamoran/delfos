@@ -15,8 +15,8 @@ from utils.constants import *
 from utils.Strategy import Strategy
 
 
-accounts = []
-strategies = []
+accounts, strategies = [], []
+
 emojis = {
     True:  '💎', False:  '❌',
     'BUY': '🐃', 'SELL': '🐻',
@@ -50,6 +50,8 @@ def main():
 def scan(pairs):
     """Fetch RSIs, close positions which need so, and store pairs matching price signal for potential positions."""
     global accounts
+
+    RSIs = []
 
     for pair in pairs:
         symbol = pair['symbol']
@@ -88,9 +90,10 @@ def scan(pairs):
                 logger.error(error)
                 sys.exit(1)
 
+        RSIs.append(pair['RSI'])
         logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(pair['price'], pair['RSI']))
 
-        logged_symbols = []  # Tracks symbols logged in intel.csv
+        logged_symbols = []  # Tracks symbols logged in history.csv
         for i in range(len(strategies)):
             account, strategy = accounts[i], strategies[i]
 
@@ -105,8 +108,25 @@ def scan(pairs):
         # sleep(0.04)  # Avoid 429's from TAAPI
 
     # HACK: could make use of sorted() and an additional map() to use a lambda
-    # Sort all potential positions in terms of strength
+    # Sort all potential positions of each account in terms of strength
     accounts = list(map(sort_potential, accounts))
+
+    average_RSI = sum(RSIs) / len(RSIs)
+    logger.debug('📊 Average macro-RSI: %f' % average_RSI)
+
+    if average_RSI <= 20:
+        logger.debug('📐🐻🐻 SUPER BEARISH macro-trend')
+    elif average_RSI > 20 and average_RSI <= 40:
+        logger.debug('📐🐻 BEARISH macro-trend')
+    elif average_RSI > 25 and average_RSI <= 60:
+        logger.debug('📐⚖️  NEUTRAL macro-trend')
+    elif average_RSI > 60 and average_RSI <= 80:
+        logger.debug('📐🐃 BULLISH macro-trend')
+    else:
+        logger.debug('📐🐃🐃 SUPER BULLISH macro-trend')
+
+    with open('macro-trend.csv', 'a') as fd:
+        fd.write("%f,%s\n" % (average_RSI, datetime.now()))
 
 
 def close_if_needed(account, strategy, pair, logged_symbols):
@@ -123,7 +143,7 @@ def close_if_needed(account, strategy, pair, logged_symbols):
     if opened:
         # Log the pair, price, and RSI of the open asset.
         if pair['symbol'] not in logged_symbols:
-            with open('intel.csv', 'a') as fd:
+            with open('history.csv', 'a') as fd:
                 fd.write("%s,%f,%f,%s\n" % (pair['symbol'], price, pair['RSI'], datetime.now()))
 
             logged_symbols.append(pair['symbol'])
@@ -257,8 +277,9 @@ if __name__ == '__main__':
     Path('sessions/' + session).mkdir(parents=True, exist_ok=True)
     os.chdir('sessions/' + session)
 
-    with open('intel.csv', 'w') as fd:
-        fd.write("pair,price,RSI,timestamp\n")
+    with open('history.csv', 'w') as fd1, open('macro-trend.csv', 'w') as fd2:
+        fd1.write('pair,price,RSI,timestamp\n')
+        fd2.write('RSI,timestamp\n')
 
     logger.remove()
 
