@@ -133,3 +133,4 @@ logs/
 sessions/
 .vscode/
 telegram_bot.py
+utils/constants.py

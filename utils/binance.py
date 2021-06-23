@@ -1,11 +1,9 @@
 import hmac
 import time
-import datetime
 from requests import Session
 from urllib import parse as urllib
 
 from dotenv import dotenv_values, load_dotenv
-from loguru import logger
 
 from utils.constants import *
 
