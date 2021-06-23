@@ -1,11 +1,30 @@
+from utils.constants import *
+
+
 class Strategy:
     """NOTE: every method assumes self.type == 'RSI'. This should be checked first for other indicators."""
 
-    def __init__(self, name, type, profit_close, constants):  
-        self.name = name
-        self.type = type
-        self.profit_close = profit_close
-        self.min, self.max = constants[0], constants[1]
+    def __init__(self, strategy):
+        self.name = strategy['name']
+        self.type = strategy['type']
+        self.profit_close = strategy['profit_close']
+        self.min, self.max = strategy['constants'][0], strategy['constants'][1]
+
+        # Optional parameters
+        self.stop_loss = strategy['stop_loss'] \
+            if 'stop_loss' in strategy.keys() \
+            else STOP_LOSS
+        self.take_profit = strategy['take_profit'] \
+            if 'take_profit' in strategy.keys() \
+            else TAKE_PROFIT
+
+    def __str__(self):
+        return '''{}
+    type         = {}
+    profit_close = {}
+    min, max     = {}, {}
+    stop_loss    = {}
+    take_profit  = {}\n'''.format(self.name, self.type, self.profit_close, self.min, self.max, self.stop_loss, self.take_profit)
 
     def pair_is_interesting(self, pair):
         """Return True if the RSI is overbought (RSI >= max) or oversold (RSI <= min)."""

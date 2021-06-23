@@ -267,17 +267,19 @@ if __name__ == '__main__':
     logger.add(sys.stdout, colorize=True, format="<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{message}</level>")
 
     logger.info('Logging at: sessions/%s/' % session)
-
     logger.info('ACCOUNT_RISK: %0.2f' % ACCOUNT_RISK)
     logger.info('ACCOUNT_SIZE: %0.2f' % ACCOUNT_SIZE)
-    logger.info('STOP_LOSS: %0.2f\tTAKE_PROFIT: %0.2f' % (STOP_LOSS, TAKE_PROFIT))
+
+    logger.info('Default STOP_LOSS: %0.2f' % STOP_LOSS)
+    logger.info('Default TAKE_PROFIT: %0.2f' % TAKE_PROFIT)
 
     # Create 1 dedicated account and directory for each trading strategy
     for i in range(len(STRATEGIES)):
-        strategy = STRATEGIES[i]
-        strategy = Strategy(
-            strategy['name'], strategy['type'], strategy['profit_close'], strategy['constants']
-        )
+        try:
+            strategy = Strategy(STRATEGIES[i])
+        except KeyError as e:
+            logger.error('[!] Need to add required strategy parameter %s, exiting...' % e)
+            sys.exit(1)
 
         Path(strategy.name).mkdir(parents=True, exist_ok=True)
 
@@ -289,21 +291,22 @@ if __name__ == '__main__':
 
         accounts.append({
             'strategy': strategy.name,   # strategy name
-            'allocated' : 0.0,           # capital allocated in positions
+            'allocated' : 0.0,           # capital allocated in positions in USDT
             'available' : ACCOUNT_SIZE,  # liquid unused capital + (realized) pnl
-            'positions' : [],  # objects of the open positions
-            'potential' : [],  # objects of potential positions to be opened: [symbol, price, RSI, strength]
+            'positions' : [],  # open positions
+            'potential' : [],  # positions to be opened: [symbol, price, RSI, strength]
             'pnl' : 0.0,  # total realized and recompounded profit & loss in USDT
-            'loses' : 0,  # counter of profitable trades
-            'wins': 0,    # counter of unprofitable trades
+            'loses' : 0,  # counter of unprofitable trades
+            'wins': 0,    # counter of profitable trades
         })
 
         strategies.append(strategy)
 
     logger.info('ℹ️  Loaded %d strategies' % len(strategies))
-    logger.info(STRATEGIES)
+    for strategy in strategies:
+        logger.info(strategy)
 
     try:
         main()
     except KeyboardInterrupt:
-        logger.info('Heard CTRL-C, quitting...')
+        logger.warning('Heard CTRL-C, quitting...')
