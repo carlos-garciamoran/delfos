@@ -49,9 +49,7 @@ def main():
 
 def scan(pairs):
     """Fetch RSIs, close positions which need so, and store pairs matching price signal for potential positions."""
-    # For each pair, fetch its RSI and check if its position should be closed.
-    global logged_symbols
-    logged_symbols = []
+    global accounts
 
     for pair in pairs:
         symbol = pair['symbol']
@@ -92,11 +90,12 @@ def scan(pairs):
 
         logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(pair['price'], pair['RSI']))
 
+        logged_symbols = []  # Tracks symbols logged in intel.csv
         for i in range(len(strategies)):
             account, strategy = accounts[i], strategies[i]
 
             # NOTE: this iterates for each position symbol
-            account = close_if_needed(account, strategy, pair)
+            account = close_if_needed(account, strategy, pair, logged_symbols)
 
             if strategy.pair_is_interesting(pair):
                 pair['strength'] = strategy.compute_strength(pair)
@@ -105,15 +104,12 @@ def scan(pairs):
             accounts[i] = account
         # sleep(0.04)  # Avoid 429's from TAAPI
 
-    # For each account, sort all potential positions in terms of strength
-    for i in range(len(accounts)):
-        account = accounts[i]
-        # Most extreme RSIs have priority (i.e. positions are opened first)
-        account['potential'].sort(key=lambda k: k['strength'], reverse=True)
-        accounts[i] = account
+    # HACK: could make use of sorted() and an additional map() to use a lambda
+    # Sort all potential positions in terms of strength
+    accounts = list(map(sort_potential, accounts))
 
 
-def close_if_needed(account, strategy, pair):
+def close_if_needed(account, strategy, pair, logged_symbols):
     """Given a pair, close its position if its SL, TP, or a price signal has been hit."""
     opened = False
     price = pair['price']
@@ -132,18 +128,7 @@ def close_if_needed(account, strategy, pair):
 
             logged_symbols.append(pair['symbol'])
 
-        # Stop loss and take profit are the same for all strategies.
-        if position['side'] == 'BUY':
-            stop_loss_hit   = price <= position['stop_loss']
-            take_profit_hit = price >= position['take_profit']
-        else:
-            stop_loss_hit   = price >= position['stop_loss']
-            take_profit_hit = price <= position['take_profit']
-
-        # Always returns either true or false.
-        price_signal_hit = strategy.should_close(position, pair)
-
-        needs_to_close = price_signal_hit or stop_loss_hit or take_profit_hit
+        needs_to_close = strategy.should_close(position, pair)
 
         if needs_to_close:
             position = emulator.close_order(position, price)
@@ -170,6 +155,14 @@ def close_if_needed(account, strategy, pair):
             logger.info('💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}'.format(
                 account['available'] + account['allocated'], account['allocated']
             ))
+
+            # SL/TP check repeated here for post-analysis purposes
+            if position['side'] == 'BUY':
+                stop_loss_hit = pair['price'] <= position['stop_loss']
+                take_profit_hit = pair['price'] >= position['take_profit']
+            else:
+                stop_loss_hit = pair['price'] >= position['stop_loss']
+                take_profit_hit = pair['price'] <= position['take_profit']
 
             if stop_loss_hit:
                 logger.info('🚫 SL hit')
@@ -228,6 +221,13 @@ def open_positions():
         account['potential'] = []
 
         accounts[i] = account
+
+
+def sort_potential(account):
+    # Most extreme RSIs have priority (i.e. positions are opened first)
+    account['potential'].sort(key=lambda k: k['strength'], reverse=True)
+
+    return account
 
 
 def log_to_json(account, position=None):

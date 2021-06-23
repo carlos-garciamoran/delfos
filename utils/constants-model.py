@@ -12,12 +12,21 @@ STRATEGIES = [
         'type': 'RSI',
         'profit_close': False,
         'constants': (30, 70),
+        'stop_loss': 0.08,
+        'take_profit': 0.07,
     },
     {
         'name': 'RSI_30_70_profit',
         'type': 'RSI',
         'profit_close': True,
         'constants': (30, 70),
+        'take_profit': 0.01
+    },
+    {
+        'name': 'RSI_40_60',
+        'type': 'RSI',
+        'profit_close': False,
+        'constants': (40, 80),
     },
 ]
 

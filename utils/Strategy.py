@@ -24,7 +24,10 @@ class Strategy:
     profit_close = {}
     min, max     = {}, {}
     stop_loss    = {}
-    take_profit  = {}\n'''.format(self.name, self.type, self.profit_close, self.min, self.max, self.stop_loss, self.take_profit)
+    take_profit  = {}\n'''.format(
+        self.name, self.type, self.profit_close, self.min, self.max, self.stop_loss, self.take_profit
+        )
+
 
     def pair_is_interesting(self, pair):
         """Return True if the RSI is overbought (RSI >= max) or oversold (RSI <= min)."""
@@ -41,14 +44,20 @@ class Strategy:
     def should_close(self, position, pair):
         """Return True if the RSI is overbought in a BUY position or oversold in a SELL position."""
         if position['side'] == 'BUY':
-            should_close = pair['RSI'] >= self.max
+            stop_loss_hit = pair['price'] <= position['stop_loss']
+            take_profit_hit = pair['price'] >= position['take_profit']
+
+            price_signal = pair['RSI'] >= self.max
 
             if self.profit_close:
-                should_close = should_close and pair['price'] >= position['entry_price']
+                price_signal = price_signal and pair['price'] >= position['entry_price']
         else:
-            should_close = pair['RSI'] <= self.min
+            stop_loss_hit = pair['price'] >= position['stop_loss']
+            take_profit_hit = pair['price'] <= position['take_profit']
+
+            price_signal = pair['RSI'] <= self.min
 
             if self.profit_close:
-                should_close = should_close and pair['price'] <= position['entry_price']
+                price_signal = price_signal and pair['price'] <= position['entry_price']
 
-        return should_close
+        return price_signal or stop_loss_hit or take_profit_hit
