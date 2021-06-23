@@ -42,9 +42,9 @@ def main():
             logger.error(error)
             return
 
-        scan(pairs)
+        average_RSI = scan(pairs)
 
-        open_positions()
+        open_positions(average_RSI)
 
 
 def scan(pairs):
@@ -94,6 +94,8 @@ def scan(pairs):
         logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(pair['price'], pair['RSI']))
 
         logged_symbols = []  # Tracks symbols logged in history.csv
+        # NOTE: macro-trend-aware code could go here. Price data should be stored and processed
+        #       after the `pairs` loop so that the macro RSI has been computed.
         for i in range(len(strategies)):
             account, strategy = accounts[i], strategies[i]
 
@@ -127,6 +129,8 @@ def scan(pairs):
 
     with open('macro-trend.csv', 'a') as fd:
         fd.write("%f,%s\n" % (average_RSI, datetime.now()))
+    
+    return average_RSI
 
 
 def close_if_needed(account, strategy, pair, logged_symbols):
@@ -199,7 +203,7 @@ def close_if_needed(account, strategy, pair, logged_symbols):
     return account
 
 
-def open_positions():
+def open_positions(average_RSI):
     """Open positions based on RSI strength. Ensure no more than 1 position per symbol is opened."""
     for i in range(len(strategies)):
         account, strategy = accounts[i], strategies[i]
@@ -219,6 +223,15 @@ def open_positions():
             if position_size <= account['available']:
                 # By this point there is a price signal due to scan() filtering via strategy['is_interesting']
                 side = strategy.determine_side(pair)
+
+                # TODO: move code away from open_positions. Simply check avg RSI before including
+                #        in `potential` from `scan()`
+                if average_RSI <= 20 and side == 'BUY':
+                    logger.warning('⛔ Skipping false-flag (BUY in bearish market)')
+                    continue
+                elif average_RSI >= 80 and side == 'SELL':
+                    logger.warning('⛔ Skipping false-flag (SELL in bullish market)')
+                    continue
 
                 position = emulator.new_order(pair['symbol'], side, pair['price'], position_size, strategy)
                 account['positions'].append(position)

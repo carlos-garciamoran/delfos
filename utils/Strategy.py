@@ -31,14 +31,21 @@ class Strategy:
 
     def pair_is_interesting(self, pair):
         """Return True if the RSI is overbought (RSI >= max) or oversold (RSI <= min)."""
+        return self.RSI_is_touched(pair) and self.macro_trend_confirms()
+
+    def macro_trend_confirms(self):
+        pass
+
+    def RSI_is_touched(self, pair):
+        """Return True if the RSI is overbought (RSI >= max) or oversold (RSI <= min)."""
         return pair['RSI'] >= self.max or pair['RSI'] <= self.min
 
     def compute_strength(self, pair):
-        """Calculate the strength of the pair's RSI."""
+        """Calculate the strength of the pair's indicator."""
         return abs(50 - pair['RSI'])
 
     def determine_side(self, pair):
-        """Return 'SELL' if the asset to be traded should be shorted; else return 'BUY'."""
+        """Return 'SELL' if the asset should be shorted or 'BUY' if it should be longed."""
         return 'SELL' if pair['RSI'] >= 50 else 'BUY'
 
     def should_close(self, position, pair):
