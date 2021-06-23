@@ -1,7 +1,5 @@
 import datetime
 
-from utils.constants import *
-
 
 def close_order(position, exit_price):
     position['exit_price'] = exit_price
@@ -18,13 +16,13 @@ def close_order(position, exit_price):
     return position
 
 
-def new_order(symbol, side, entry_price, size):
+def new_order(symbol, side, entry_price, size, strategy):
     if side == 'BUY':
-        stop_loss   = entry_price - (entry_price * STOP_LOSS)
-        take_profit = entry_price + (entry_price * TAKE_PROFIT)
+        stop_loss   = entry_price - (entry_price * strategy.stop_loss)
+        take_profit = entry_price + (entry_price * strategy.take_profit)
     else:
-        stop_loss   = entry_price + (entry_price * STOP_LOSS)
-        take_profit = entry_price - (entry_price * TAKE_PROFIT)
+        stop_loss   = entry_price + (entry_price * strategy.stop_loss)
+        take_profit = entry_price - (entry_price * strategy.take_profit)
 
     position = {
         'symbol': symbol,

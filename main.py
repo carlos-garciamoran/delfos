@@ -200,7 +200,7 @@ def open_positions():
                 # By this point there is a price signal due to scan() filtering via strategy['is_interesting']
                 side = strategy.determine_side(pair)
 
-                position = emulator.new_order(pair['symbol'], side, pair['price'], position_size)
+                position = emulator.new_order(pair['symbol'], side, pair['price'], position_size, strategy)
                 account['positions'].append(position)
 
                 account['available'] -= position_size    # Remove the position size from the available capital
@@ -291,12 +291,12 @@ if __name__ == '__main__':
 
         accounts.append({
             'strategy': strategy.name,   # strategy name
-            'allocated' : 0.0,           # capital allocated in positions in USDT
-            'available' : ACCOUNT_SIZE,  # liquid unused capital + (realized) pnl
-            'positions' : [],  # open positions
-            'potential' : [],  # positions to be opened: [symbol, price, RSI, strength]
-            'pnl' : 0.0,  # total realized and recompounded profit & loss in USDT
-            'loses' : 0,  # counter of unprofitable trades
+            'allocated': 0.0,           # capital allocated in positions in USDT
+            'available': ACCOUNT_SIZE,  # liquid unused capital + (realized) pnl
+            'positions': [],  # open positions
+            'potential': [],  # positions to be opened: [symbol, price, RSI, strength]
+            'pnl': 0.0,  # total realized and recompounded profit & loss in USDT
+            'loses': 0,  # counter of unprofitable trades
             'wins': 0,    # counter of profitable trades
         })
 
