@@ -116,13 +116,13 @@ def scan(pairs):
     average_RSI = sum(RSIs) / len(RSIs)
     logger.debug('📊 Average macro-RSI: %f' % average_RSI)
 
-    if average_RSI <= 20:
+    if average_RSI <= 30:
         logger.debug('📐🐻🐻 SUPER BEARISH macro-trend')
-    elif average_RSI > 20 and average_RSI <= 40:
+    elif average_RSI > 30 and average_RSI <= 45:
         logger.debug('📐🐻 BEARISH macro-trend')
-    elif average_RSI > 25 and average_RSI <= 60:
+    elif average_RSI > 45 and average_RSI <= 55:
         logger.debug('📐⚖️  NEUTRAL macro-trend')
-    elif average_RSI > 60 and average_RSI <= 80:
+    elif average_RSI > 55 and average_RSI <= 70:
         logger.debug('📐🐃 BULLISH macro-trend')
     else:
         logger.debug('📐🐃🐃 SUPER BULLISH macro-trend')
@@ -226,10 +226,10 @@ def open_positions(average_RSI):
 
                 # TODO: move code away from open_positions. Simply check avg RSI before including
                 #        in `potential` from `scan()`
-                if average_RSI <= 20 and side == 'BUY':
+                if average_RSI <= 30 and side == 'BUY':
                     logger.warning('⛔ Skipping false-flag (BUY in bearish market)')
                     continue
-                elif average_RSI >= 80 and side == 'SELL':
+                elif average_RSI >= 70 and side == 'SELL':
                     logger.warning('⛔ Skipping false-flag (SELL in bullish market)')
                     continue
 

@@ -31,7 +31,7 @@ class Strategy:
 
     def pair_is_interesting(self, pair):
         """Return True if the RSI is overbought (RSI >= max) or oversold (RSI <= min)."""
-        return self.RSI_is_touched(pair) and self.macro_trend_confirms()
+        return self.RSI_is_touched(pair) # and self.macro_trend_confirms()
 
     def macro_trend_confirms(self):
         pass
