@@ -42,7 +42,10 @@ def main():
             logger.error(error)
             return
 
-        average_RSI = scan(pairs)
+        try:
+            average_RSI = scan(pairs)
+        except ZeroDivisionError:
+            continue
 
         open_positions(average_RSI)
 
@@ -81,6 +84,7 @@ def scan(pairs):
                 continue
             # These codes are odd but happen, we just ignore them. 500's return an empty body
             elif code == 500 or code == 502 or code == 504 or code == 524 or code == 525:
+                sleep(2)
                 continue
             elif code == 429:
                 logger.error(error)
