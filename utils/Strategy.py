@@ -6,17 +6,29 @@ class Strategy:
 
     def __init__(self, strategy):
         self.name = strategy['name']
-        self.type = strategy['type']
         self.profit_close = strategy['profit_close']
         self.min, self.max = strategy['constants'][0], strategy['constants'][1]
 
-        # Optional parameters
+        # Default values
+        self.type = strategy['type'] \
+            if 'type' in strategy.keys() \
+            else 'RSI'
         self.stop_loss = strategy['stop_loss'] \
             if 'stop_loss' in strategy.keys() \
             else STOP_LOSS
         self.take_profit = strategy['take_profit'] \
             if 'take_profit' in strategy.keys() \
             else TAKE_PROFIT
+
+    def __eq__(self, other):
+        if not isinstance(other, Strategy):
+            # Do not attempt to compare against unrelated types
+            return NotImplemented
+
+        return self.name == other.name and self.profit_close == other.profit_close \
+            and self.min == other.min and self.max == other.max \
+            and self.stop_loss == other.stop_loss and self.take_profit == other.take_profit \
+            and self.type == other.type
 
     def __str__(self):
         return '''{}

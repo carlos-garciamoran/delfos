@@ -14,11 +14,18 @@
 ## Strategies
 
 **Attributes**
-- RSI constants (e.g. 30/70, 20/80)
+- Name
+- RSI constants (30/70, 20/80, ...)
 - Stop-loss
 - Take-profit
 - Close only on profit
+- Type
 
 **TODO**
 - RSI divergences
-- momentum
+- Heikin-Ashi candles
+- Momentum
+
+## Setup
+- rename `constants-model.py` to `constants.py`
+- rename `strategies-model.json` to `strategies.json`

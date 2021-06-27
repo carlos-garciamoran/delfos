@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import json
-from pathlib import Path
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
+from shutil import copyfile
 from time import sleep
 
 from loguru import logger
@@ -25,6 +26,17 @@ emojis = {
 
 def main():
     while True:
+        # TODO: need to find out which strategies have been removed from the file and remove the
+        #       account from them. Also record unrealized P&L before closing account.
+        #       DO NOT DELETE strategy directory.
+        #       Strategies can either be active or stopped. maybe add 
+        logger.debug('ℹ️ Parsing and setting up strategies...')
+        setup_strategies()
+
+        logger.debug('ℹ️  Loaded %d strategies' % len(strategies))
+        for strategy in strategies:
+            logger.debug(strategy)
+
         logger.debug('📡 Hitting Binance...')
 
         # Catch odd error related to openssl socket connection
@@ -49,6 +61,48 @@ def main():
             continue
 
         open_positions(average_RSI)
+
+
+def setup_strategies():
+    """Parse JSON strategies and set up an account and directory for new ones."""
+    with open('strategies.json') as fd:
+        raw_strategies = json.loads(fd.read())
+
+    for raw_strategy in raw_strategies:
+        try:
+            strategy = Strategy(raw_strategy)
+        except KeyError as e:
+            logger.error('[!] Error parsing %s' % raw_strategy['name'])
+            logger.error('[!] Need to add strategy parameter %s, skipping...' % e)
+            continue
+
+        # TODO: check name as well?
+        # Skip already existing strategies so they are not reset
+        name = strategy.name
+        if strategy in strategies:
+            logger.debug('[i] Skipping existing strategy %s' % name)
+            continue
+
+        strategies.append(strategy)      # Add new strategy
+        Path(name).mkdir(exist_ok=True)  # Each strategy gets its own directory
+
+        # Create JSON files for tracking positions
+        with open('%s/closed.json' % name, 'w') as fd1, \
+            open('%s/opened.json' % name, 'w') as fd2:
+            fd1.write('[]\n')
+            fd2.write('[]\n')
+
+        # Create dedicated trading account
+        accounts.append({
+            'strategy': name,
+            'allocated': 0.0,  # capital allocated in positions in USDT
+            'available': ACCOUNT_SIZE,  # liquid unused capital + (realized) pnl
+            'positions': [],  # open positions
+            'potential': [],  # positions to be opened: [symbol, price, RSI, strength]
+            'pnl': 0.0,  # total realized and recompounded profit & loss in USDT
+            'loses': 0,  # counter of unprofitable trades
+            'wins': 0,   # counter of profitable trades
+        })
 
 
 def scan(pairs):
@@ -121,13 +175,13 @@ def scan(pairs):
     average_RSI = sum(RSIs) / len(RSIs)
     logger.debug('📊 Average macro-RSI: %f' % average_RSI)
 
-    if average_RSI <= 30:
+    if average_RSI <= 25:
         logger.debug('📐🐻🐻 SUPER BEARISH macro-trend')
-    elif average_RSI > 30 and average_RSI <= 45:
+    elif average_RSI > 25 and average_RSI <= 42:
         logger.debug('📐🐻 BEARISH macro-trend')
-    elif average_RSI > 45 and average_RSI <= 55:
+    elif average_RSI > 42 and average_RSI <= 58:
         logger.debug('📐⚖️  NEUTRAL macro-trend')
-    elif average_RSI > 55 and average_RSI <= 70:
+    elif average_RSI > 58 and average_RSI <= 75:
         logger.debug('📐🐃 BULLISH macro-trend')
     else:
         logger.debug('📐🐃🐃 SUPER BULLISH macro-trend')
@@ -222,7 +276,7 @@ def open_positions(average_RSI):
                 continue
 
             # Halving is for testing purposes
-            position_size = (account['available'] + account['allocated']) * ACCOUNT_RISK / STOP_LOSS / 2
+            position_size = (account['available'] + account['allocated']) * ACCOUNT_RISK / STOP_LOSS
 
             # This check is needed in the edge case of `ACCOUNT_RISK > STOP_LOSS`
             if position_size <= account['available']:
@@ -293,6 +347,7 @@ if __name__ == '__main__':
     session = sys.argv[1]
 
     Path('sessions/' + session).mkdir(parents=True, exist_ok=True)
+    copyfile('strategies.json', 'sessions/' + session)
     os.chdir('sessions/' + session)
 
     with open('history.csv', 'w') as fd1, open('macro-trend.csv', 'w') as fd2:
@@ -309,41 +364,8 @@ if __name__ == '__main__':
     logger.info('ACCOUNT_RISK: %0.2f' % ACCOUNT_RISK)
     logger.info('ACCOUNT_SIZE: %0.2f' % ACCOUNT_SIZE)
 
-    logger.info('Default STOP_LOSS: %0.2f' % STOP_LOSS)
-    logger.info('Default TAKE_PROFIT: %0.2f' % TAKE_PROFIT)
-
-    # Create 1 dedicated account and directory for each trading strategy
-    for i in range(len(STRATEGIES)):
-        try:
-            strategy = Strategy(STRATEGIES[i])
-        except KeyError as e:
-            logger.error('[!] Need to add required strategy parameter %s, exiting...' % e)
-            sys.exit(1)
-
-        Path(strategy.name).mkdir(parents=True, exist_ok=True)
-
-        # Initialise JSON positions files
-        with open('%s/closed.json' % strategy.name, 'w') as fd1, \
-             open('%s/opened.json' % strategy.name, 'w') as fd2:
-            fd1.write('[]\n')
-            fd2.write('[]\n')
-
-        accounts.append({
-            'strategy': strategy.name,   # strategy name
-            'allocated': 0.0,           # capital allocated in positions in USDT
-            'available': ACCOUNT_SIZE,  # liquid unused capital + (realized) pnl
-            'positions': [],  # open positions
-            'potential': [],  # positions to be opened: [symbol, price, RSI, strength]
-            'pnl': 0.0,  # total realized and recompounded profit & loss in USDT
-            'loses': 0,  # counter of unprofitable trades
-            'wins': 0,    # counter of profitable trades
-        })
-
-        strategies.append(strategy)
-
-    logger.info('ℹ️  Loaded %d strategies' % len(strategies))
-    for strategy in strategies:
-        logger.info(strategy)
+    logger.info('STOP_LOSS: %0.2f' % STOP_LOSS)
+    logger.info('TAKE_PROFIT: %0.2f' % TAKE_PROFIT)
 
     try:
         main()

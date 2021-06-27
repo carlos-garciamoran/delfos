@@ -1,0 +1,21 @@
+[
+    {
+        "name": "RSI_30_70_SL_5",
+        "profit_close": false,
+        "constants": [30, 70],
+        "stop_loss": 0.05,
+        "take_profit": 0.04
+    },
+    {
+        "name": "RSI_30_70_profit",
+        "profit_close": true,
+        "constants": [30, 70],
+        "take_profit": 0.01
+    },
+    {
+        "name": "RSI_30_70_SL_10",
+        "profit_close": false,
+        "constants": [30, 70],
+        "stop_loss": 0.10
+    }
+]

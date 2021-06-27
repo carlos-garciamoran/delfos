@@ -129,8 +129,10 @@ dmypy.json
 .pyre/
 
 # Misc
+.vscode/
 logs/
 sessions/
-.vscode/
-telegram_bot.py
 utils/constants.py
+strategies.json
+
+telegram_bot.py
