@@ -45,6 +45,7 @@ def main():
         try:
             average_RSI = scan(pairs)
         except ZeroDivisionError:
+            logger.error('[!] TAAPI is tired of us...')
             continue
 
         open_positions(average_RSI)
@@ -83,7 +84,7 @@ def scan(pairs):
                 # NON_TRADED_SYMBOLS.append(coin + 'USDT')
                 continue
             # These codes are odd but happen, we just ignore them. 500's return an empty body
-            elif code == 500 or code == 502 or code == 504 or code == 524 or code == 525:
+            elif code >= 500:  #  known errors: 500, 502, 504, 524, 525
                 sleep(2)
                 continue
             elif code == 429:
