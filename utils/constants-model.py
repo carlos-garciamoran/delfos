@@ -1,7 +1,7 @@
 ACCOUNT_RISK = 0.01    # risk taken per trade (e.g. 0.01 = 1% of account)
 ACCOUNT_SIZE = 1000.0  # initial account size in USDT
 
-STOP_LOSS = 0.03     # distance from entry price (e.g. 0.07 = 7% away)
+STOP_LOSS = 0.05     # distance from entry price (e.g. 0.05 = 5% away)
 TAKE_PROFIT = 0.04   # idem
 
 # Blacklist of symbols ignored

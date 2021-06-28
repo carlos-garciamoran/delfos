@@ -33,7 +33,7 @@ def main():
         logger.debug('ℹ️ Parsing and setting up strategies...')
         setup_strategies()
 
-        logger.debug('ℹ️  Loaded %d strategies' % len(strategies))
+        logger.debug('ℹ️ Loaded %d strategies' % len(strategies))
         for strategy in strategies:
             logger.debug(strategy)
 
@@ -80,7 +80,6 @@ def setup_strategies():
         # Skip already existing strategies so they are not reset
         name = strategy.name
         if strategy in strategies:
-            logger.debug('[i] Skipping existing strategy %s' % name)
             continue
 
         strategies.append(strategy)      # Add new strategy
@@ -173,22 +172,21 @@ def scan(pairs):
     accounts = list(map(sort_potential, accounts))
 
     average_RSI = sum(RSIs) / len(RSIs)
-    logger.debug('📊 Average macro-RSI: %f' % average_RSI)
 
-    if average_RSI <= 25:
-        logger.debug('📐🐻🐻 SUPER BEARISH macro-trend')
-    elif average_RSI > 25 and average_RSI <= 42:
-        logger.debug('📐🐻 BEARISH macro-trend')
+    if average_RSI <= 30:
+        logger.debug('📐🐻🐻 SUPER BEARISH macro-trend (%0.2f)' % average_RSI)
+    elif average_RSI > 30 and average_RSI <= 42:
+        logger.debug('📐🐻 BEARISH macro-trend (%0.2f)' % average_RSI)
     elif average_RSI > 42 and average_RSI <= 58:
-        logger.debug('📐⚖️  NEUTRAL macro-trend')
-    elif average_RSI > 58 and average_RSI <= 75:
-        logger.debug('📐🐃 BULLISH macro-trend')
+        logger.debug('📐⚖️  NEUTRAL macro-trend (%0.2f)' % average_RSI)
+    elif average_RSI > 58 and average_RSI <= 70:
+        logger.debug('📐🐃 BULLISH macro-trend (%0.2f)' % average_RSI)
     else:
-        logger.debug('📐🐃🐃 SUPER BULLISH macro-trend')
+        logger.debug('📐🐃🐃 SUPER BULLISH macro-trend (%0.2f)' % average_RSI)
 
     with open('macro-trend.csv', 'a') as fd:
         fd.write("%f,%s\n" % (average_RSI, datetime.now()))
-    
+
     return average_RSI
 
 
@@ -347,7 +345,7 @@ if __name__ == '__main__':
     session = sys.argv[1]
 
     Path('sessions/' + session).mkdir(parents=True, exist_ok=True)
-    copyfile('strategies.json', 'sessions/' + session)
+    copyfile('strategies.json', 'sessions/{}/strategies.json'.format(session))
     os.chdir('sessions/' + session)
 
     with open('history.csv', 'w') as fd1, open('macro-trend.csv', 'w') as fd2:
