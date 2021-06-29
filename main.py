@@ -5,13 +5,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from shutil import copyfile
-from time import sleep
 
 from loguru import logger
 
 import utils.aggregator as aggregator
 import utils.emulator as emulator
-from utils.constants import *
 from utils.Strategy import Strategy
 
 
@@ -28,7 +26,7 @@ def main():
         # TODO: need to find out which strategies have been removed from the file and remove the
         #       account from them. Also record unrealized P&L before closing account.
         #       DO NOT DELETE strategy directory.
-        setup_strategies()
+        setup_accounts_and_strategies()
 
         logger.debug('ℹ️ Loaded %d strategies' % len(strategies))
         for strategy in strategies:
@@ -63,19 +61,19 @@ def main():
         logger.debug('Closing positions which need so...')
         close_and_open(pairs, macro_RSI)
 
-        # open_positions(macro_RSI)
 
-
-def setup_strategies():
+def setup_accounts_and_strategies():
     """Parse JSON strategies and set up an account and directory for new ones."""
     with open('strategies.json') as fd:
-        raw_strategies = json.loads(fd.read())
+        data = json.loads(fd.read())
 
-    for raw_strategy in raw_strategies:
+    defaults, strategies_data = data['defaults'], data['strategies']
+
+    for strategy_data in strategies_data:
         try:
-            strategy = Strategy(raw_strategy)
+            strategy = Strategy(defaults, strategy_data)
         except KeyError as e:
-            logger.error('[!] Error parsing %s' % raw_strategy['name'])
+            logger.error('[!] Error parsing %s' % strategy_data['name'])
             logger.error('[!] Need to add strategy parameter %s, skipping...' % e)
             continue
 
@@ -94,11 +92,12 @@ def setup_strategies():
             fd1.write('[]\n')
             fd2.write('[]\n')
 
+        # NOTE: `available` is not set by strategy, it only uses the default
         # Create dedicated trading account
         accounts.append({
             'strategy': name,
             'allocated': 0.0,  # capital allocated in positions in USDT
-            'available': ACCOUNT_SIZE,  # liquid unused capital + (realized) pnl
+            'available': defaults['account_size'],  # liquid unused capital + (realized) pnl
             'positions': [],  # open positions
             'potential': [],  # positions to be opened: [symbol, price, RSI, strength]
             'pnl': 0.0,  # total realized and recompounded profit & loss in USDT
@@ -177,7 +176,9 @@ def close_if_needed(account, strategy, pair, macro_RSI, logged_symbols):
             account['pnl'] += position['pnl'][1]  # Update net p&l in USDT
 
             # Percentage increase = (final_value - starting_value) / starting_value * 100
-            percentage = (account['available'] + account['allocated'] - ACCOUNT_SIZE) / ACCOUNT_SIZE * 100
+            percentage = \
+                (account['available'] + account['allocated'] - strategy.account_size) \
+                / strategy.account_size * 100
 
             logger.warning('🔮 Strat: ' + strategy.name)
             logger.warning('{} Closed {} {} at {}. P&L: {:0.2f}%, ${:0.2f}'.format(
@@ -221,10 +222,9 @@ def open_positions(account, strategy, macro_RSI):
         if pair['symbol'] in open_symbols:
             continue
 
-        # Halving is for testing purposes
-        position_size = (account['available'] + account['allocated']) * ACCOUNT_RISK / STOP_LOSS
+        position_size = strategy.determine_position_size(account['allocated'], account['available'])
 
-        # This check is needed in the edge case of `ACCOUNT_RISK > STOP_LOSS`
+        # This check is needed in the edge case of `strategy.account_risk > strategy.stop_loss`
         if position_size <= account['available']:
             # By this point there is a price signal due to scan() filtering via strategy['is_interesting']
             side = strategy.determine_side(pair, macro_RSI)
@@ -285,6 +285,13 @@ if __name__ == '__main__':
 
     session = sys.argv[1]
 
+    # Setup logging: use `debug()` for writing to STDOUT but NOT to logfile
+    logger.remove()
+    logger.add('tracking.log', format="{time:MM-DD HH:mm:ss.SSS} | {message}", level="INFO")
+    logger.add(sys.stdout, colorize=True, format="<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{message}</level>")
+
+    logger.info('Logging at: sessions/%s/' % session)
+
     Path('sessions/' + session).mkdir(parents=True, exist_ok=True)
     copyfile('strategies.json', 'sessions/{}/strategies.json'.format(session))
     os.chdir('sessions/' + session)
@@ -292,19 +299,6 @@ if __name__ == '__main__':
     with open('history.csv', 'w') as fd1, open('macro-trend.csv', 'w') as fd2:
         fd1.write('pair,price,RSI,timestamp\n')
         fd2.write('RSI,timestamp\n')
-
-    logger.remove()
-
-    # Use debug() for writing to STDOUT but NOT to logfile
-    logger.add('tracking.log', format="{time:MM-DD HH:mm:ss.SSS} | {message}", level="INFO")
-    logger.add(sys.stdout, colorize=True, format="<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{message}</level>")
-
-    logger.info('Logging at: sessions/%s/' % session)
-    logger.info('ACCOUNT_RISK: %0.2f' % ACCOUNT_RISK)
-    logger.info('ACCOUNT_SIZE: %0.2f' % ACCOUNT_SIZE)
-
-    logger.info('STOP_LOSS: %0.2f' % STOP_LOSS)
-    logger.info('TAKE_PROFIT: %0.2f' % TAKE_PROFIT)
 
     try:
         main()

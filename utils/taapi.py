@@ -1,7 +1,6 @@
 from requests import Session
 
 from dotenv import dotenv_values, load_dotenv
-from loguru import logger
 
 
 load_dotenv()
@@ -21,7 +20,7 @@ def get_RSI(symbol):
     endpoint = URL + '/rsi'
     resp = s.get(endpoint, params={ 'symbol': symbol })
 
-    # TAAPI sometimes returns a 5xx's
+    # TAAPI sometimes returns 5xx's
     if resp.status_code == 200:
         RSI = resp.json()['value']
         return RSI, resp.status_code, None

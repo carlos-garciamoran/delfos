@@ -1,42 +1,54 @@
-from utils.constants import *
-
-
 class Strategy:
     """NOTE: every method assumes self.type == 'RSI'. This should be checked first for other indicators."""
-    def __init__(self, strategy):
+    def __init__(self, defaults, strategy):
+        # Required attributes
         self.name = strategy['name']
-        self.profit_close = strategy['profit_close']
         self.min, self.max = strategy['constants'][0], strategy['constants'][1]
 
-        # Default values
+        # Optional attributes (defaults)
+        self.account_risk = strategy['account_risk'] \
+            if 'account_risk' in strategy.keys() \
+            else defaults['account_risk']
+        self.account_size = strategy['account_size'] \
+            if 'account_size' in strategy.keys() \
+            else defaults['account_size']
+
+        self.profit_close = strategy['profit_close'] \
+            if 'profit_close' in strategy.keys() \
+            else False
+        self.stop_loss = strategy['stop_loss'] \
+            if 'stop_loss' in strategy.keys() \
+            else defaults['stop_loss']
+        self.take_profit = strategy['take_profit'] \
+            if 'take_profit' in strategy.keys() \
+            else defaults['take_profit']
+        # NOTE: unused attribute
         self.type = strategy['type'] \
             if 'type' in strategy.keys() \
             else 'RSI'
-        self.stop_loss = strategy['stop_loss'] \
-            if 'stop_loss' in strategy.keys() \
-            else STOP_LOSS
-        self.take_profit = strategy['take_profit'] \
-            if 'take_profit' in strategy.keys() \
-            else TAKE_PROFIT
 
     def __eq__(self, other):
         if not isinstance(other, Strategy):
             # Do not attempt to compare against unrelated types
             return NotImplemented
 
-        return self.name == other.name and self.profit_close == other.profit_close \
-            and self.min == other.min and self.max == other.max \
+        return self.name == other.name and self.min == other.min and self.max == other.max \
+            and self.profit_close == other.profit_close \
             and self.stop_loss == other.stop_loss and self.take_profit == other.take_profit \
+            and self.account_risk == other.account_risk and self.account_size == other.account_size \
             and self.type == other.type
 
     def __str__(self):
         return '''{}
-    type         = {}
-    profit_close = {}
     min, max     = {}, {}
     stop_loss    = {}
-    take_profit  = {}\n'''.format(
-        self.name, self.type, self.profit_close, self.min, self.max, self.stop_loss, self.take_profit
+    take_profit  = {}
+    profit_close = {}
+    account_risk = {}
+    account_size = {}
+    type         = {}\n'''.format(
+        self.name, self.min, self.max, self.stop_loss, self.take_profit, self.profit_close,
+        self.account_risk, self.account_size, self.type,
         )
 
 
@@ -54,6 +66,10 @@ class Strategy:
     def compute_strength(self, pair):
         """Calculate the strength of the pair's indicator."""
         return abs(50 - pair['RSI'])
+
+    def determine_position_size(self, allocated, available):
+        """Calculate the position size according to account and strategy parameters."""
+        return (allocated + available) * self.account_risk / self.stop_loss
 
     def determine_side(self, pair, macro_RSI):
         """Return 'SELL' if the asset should be shorted or 'BUY' if it should be longed."""
