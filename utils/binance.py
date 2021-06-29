@@ -5,8 +5,6 @@ from urllib import parse as urllib
 
 from dotenv import dotenv_values, load_dotenv
 
-from utils.constants import *
-
 
 load_dotenv()
 
@@ -90,27 +88,15 @@ def get_price(symbol):
 
 
 def get_prices():
-    """Get all symbol prices and filter them. Weight: 2."""
-    prices = []
+    """Get all symbol prices. Weight: 2."""
     endpoint = V3 + '/ticker/price'
 
     resp = s.get(endpoint)
-    dump = resp.json()
+    prices = resp.json()
 
     # Basic error checking
     if resp.status_code != 200:
         return prices, resp.status_code, resp.text
-
-    # Parse the price for each interesting symbol
-    for pair in dump:
-        if pair['symbol'][-4:] != 'USDT' or pair['symbol'] in NON_TRADED_SYMBOLS or \
-        'BULL' in pair['symbol'] or 'BEAR' in pair['symbol'] or \
-        'UP' in pair['symbol'] or 'DOWN' in pair['symbol']:
-            # Skip uninsteresting symbols
-            continue
-
-        pair['price'] = float(pair['price'])
-        prices.append(pair)
 
     return prices, resp.status_code, None
 

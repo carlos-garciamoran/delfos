@@ -60,13 +60,15 @@ class Strategy:
         """Return 'SELL' if the asset should be shorted or 'BUY' if it should be longed."""
         return 'SELL' if pair['RSI'] >= 50 else 'BUY'
 
-    def should_close(self, position, pair):
+    def should_close(self, position, pair, macro_RSI):
         """Return True if the RSI is overbought in a BUY position or oversold in a SELL position."""
         if position['side'] == 'BUY':
             stop_loss_hit = pair['price'] <= position['stop_loss']
             take_profit_hit = pair['price'] >= position['take_profit']
 
             price_signal = pair['RSI'] >= self.max
+
+            macro_close = True if macro_RSI <= 30 else False
 
             if self.profit_close:
                 price_signal = price_signal and pair['price'] >= position['entry_price']
@@ -76,7 +78,14 @@ class Strategy:
 
             price_signal = pair['RSI'] <= self.min
 
+            macro_close = True if macro_RSI >= 70 else False
+
             if self.profit_close:
                 price_signal = price_signal and pair['price'] <= position['entry_price']
+        
+        # NOTE: for testing purposes
+        if macro_close:
+            with open('save', 'a') as fd:
+                fd.write('%s,%f\n' % (str(position), macro_RSI))
 
-        return price_signal or stop_loss_hit or take_profit_hit
+        return price_signal or stop_loss_hit or take_profit_hit or macro_close
