@@ -227,10 +227,10 @@ def open_positions(account, strategy, macro_RSI):
         # This check is needed in the edge case of `ACCOUNT_RISK > STOP_LOSS`
         if position_size <= account['available']:
             # By this point there is a price signal due to scan() filtering via strategy['is_interesting']
-            side = strategy.determine_side(pair)
+            side = strategy.determine_side(pair, macro_RSI)
 
-            # TODO: move code away from open_positions. Simply check avg RSI before including
-            #        in `potential` from `scan()`
+            # TODO: move code away from open_positions. Simply check macro_RSI before including
+            #       pair in `account[potential]` at `close_and_open()`
             if macro_RSI <= 30 and side == 'BUY':
                 logger.warning('⛔ Skipping false-flag (BUY in bearish market)')
                 continue

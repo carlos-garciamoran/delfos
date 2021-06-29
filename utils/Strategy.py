@@ -3,7 +3,6 @@ from utils.constants import *
 
 class Strategy:
     """NOTE: every method assumes self.type == 'RSI'. This should be checked first for other indicators."""
-
     def __init__(self, strategy):
         self.name = strategy['name']
         self.profit_close = strategy['profit_close']
@@ -56,9 +55,16 @@ class Strategy:
         """Calculate the strength of the pair's indicator."""
         return abs(50 - pair['RSI'])
 
-    def determine_side(self, pair):
+    def determine_side(self, pair, macro_RSI):
         """Return 'SELL' if the asset should be shorted or 'BUY' if it should be longed."""
-        return 'SELL' if pair['RSI'] >= 50 else 'BUY'
+        if pair['RSI'] >= 50:
+            # Follow the trend if RSI is extreme, else look for the reverse
+            side = 'BUY' if macro_RSI >= 70 else 'SELL'
+        else:
+            # Idem
+            side = 'SELL' if macro_RSI <= 30 else 'BUY'
+
+        return side
 
     def should_close(self, position, pair, macro_RSI):
         """Return True if the RSI is overbought in a BUY position or oversold in a SELL position."""
@@ -82,10 +88,10 @@ class Strategy:
 
             if self.profit_close:
                 price_signal = price_signal and pair['price'] <= position['entry_price']
-        
+
         # NOTE: for testing purposes
         if macro_close:
-            with open('save', 'a') as fd:
-                fd.write('%s,%f\n' % (str(position), macro_RSI))
+            with open('macro-testing.log', 'a') as fd:
+                fd.write('%s,%s,%f\n' % (str(position), str(pair), macro_RSI))
 
         return price_signal or stop_loss_hit or take_profit_hit or macro_close
