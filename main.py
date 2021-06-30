@@ -28,10 +28,6 @@ def main():
         #       DO NOT DELETE strategy directory.
         setup_accounts_and_strategies()
 
-        logger.debug('ℹ️ Loaded %d strategies' % len(strategies))
-        for strategy in strategies:
-            logger.debug(strategy)
-
         logger.debug('📡 Aggregating market data...')
 
         # Catch odd openssl socket connection error
@@ -48,15 +44,15 @@ def main():
             return
 
         if macro_RSI <= 30:
-            logger.debug('📐🐻🐻 SUPER BEARISH macro-trend (%0.2f)' % macro_RSI)
+            logger.debug('🐻🐻 SUPER BEARISH macro-trend (%0.2f)' % macro_RSI)
         elif macro_RSI > 30 and macro_RSI <= 42:
-            logger.debug('📐🐻 BEARISH macro-trend (%0.2f)' % macro_RSI)
+            logger.debug('🐻 BEARISH macro-trend (%0.2f)' % macro_RSI)
         elif macro_RSI > 42 and macro_RSI <= 58:
-            logger.debug('📐⚖️  NEUTRAL macro-trend (%0.2f)' % macro_RSI)
+            logger.debug('⚖️  NEUTRAL macro-trend (%0.2f)' % macro_RSI)
         elif macro_RSI > 58 and macro_RSI <= 70:
-            logger.debug('📐🐃 BULLISH macro-trend (%0.2f)' % macro_RSI)
+            logger.debug('🐃 BULLISH macro-trend (%0.2f)' % macro_RSI)
         else:
-            logger.debug('📐🐃🐃 SUPER BULLISH macro-trend (%0.2f)' % macro_RSI)
+            logger.debug('🐃🐃 SUPER BULLISH macro-trend (%0.2f)' % macro_RSI)
 
         logger.debug('Closing positions which need so...')
         close_and_open(pairs, macro_RSI)
@@ -104,6 +100,10 @@ def setup_accounts_and_strategies():
             'loses': 0,  # counter of unprofitable trades
             'wins': 0,   # counter of profitable trades
         })
+
+        logger.info('Defaults:', defaults)
+        logger.info(strategy)
+        logger.info('Running %d strategies' % len(strategies))
 
 
 def close_and_open(pairs, macro_RSI):
@@ -287,8 +287,12 @@ if __name__ == '__main__':
 
     # Setup logging: use `debug()` for writing to STDOUT but NOT to logfile
     logger.remove()
-    logger.add('tracking.log', format="{time:MM-DD HH:mm:ss.SSS} | {message}", level="INFO")
-    logger.add(sys.stdout, colorize=True, format="<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{message}</level>")
+    logger.add('tracking.log', level="INFO",
+        format="{time:MM-DD HH:mm:ss.SSS} | {message}"
+    )
+    logger.add(sys.stdout, colorize=True,
+        format="<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{message}</level>"
+    )
 
     logger.info('Logging at: sessions/%s/' % session)
 
