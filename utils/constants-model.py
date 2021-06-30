@@ -1,3 +1,6 @@
+MACRO_RSI_MAX = 65
+MACRO_RSI_MIN = 35
+
 # Blacklist of symbols ignored
 NON_TRADED_SYMBOLS = [
     # Fiat/Stable pairs

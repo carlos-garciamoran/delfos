@@ -8,7 +8,9 @@ from shutil import copyfile
 
 from loguru import logger
 
+from utils.Account import Account
 from utils.Strategy import Strategy
+from utils.constants import *
 import utils.aggregator as aggregator
 import utils.emulator as emulator
 
@@ -30,7 +32,7 @@ def main():
 
         logger.debug('📡 Aggregating market data...')
 
-        # Catch odd openssl socket connection error
+        # Catch TAAPI and openssl socket connection errors
         try:
             pairs, macro_RSI, HTTP_error = aggregator.get_market_data(logger)
         except (KeyError, OSError, ZeroDivisionError) as e:
@@ -90,16 +92,7 @@ def setup_accounts_and_strategies():
 
         # NOTE: `available` is not set by strategy, it only uses the default
         # Create dedicated trading account
-        accounts.append({
-            'strategy': name,
-            'allocated': 0.0,  # capital allocated in positions in USDT
-            'available': defaults['account_size'],  # liquid unused capital + (realized) pnl
-            'positions': [],  # open positions
-            'potential': [],  # positions to be opened: [symbol, price, RSI, strength]
-            'pnl': 0.0,  # total realized and recompounded profit & loss in USDT
-            'loses': 0,  # counter of unprofitable trades
-            'wins': 0,   # counter of profitable trades
-        })
+        accounts.append( Account(defaults['account_size'], strategy) )
 
         logger.info('Defaults: ' + str(defaults))
         logger.info(strategy)
@@ -108,35 +101,32 @@ def setup_accounts_and_strategies():
 
 def close_and_open(pairs, macro_RSI):
     """Close positions which need so and store pairs matching price signal for potential positions."""
-    global accounts
-
     logged_symbols = []  # Tracks symbols logged in history.csv
 
     for i in range(len(strategies)):
         account, strategy = accounts[i], strategies[i]
-        # open_symbols = list(map(lambda s: s['symbol'], account['positions']))
+        # open_symbols = list(map(lambda s: s['symbol'], account.positions))
 
         # First close all necessary positions for the given strategy
         for pair in pairs:
             # NOTE: this iterates for each position symbol, expensive op!!
             # TODO: get open positions before `pairs` loop, reduce iteractions => improve perf
             #       same data is also used for `open_positions`, keep code DRY
-            account = close_if_needed(account, strategy, pair, macro_RSI, logged_symbols)
+            close_if_needed(account, strategy, pair, macro_RSI, logged_symbols)
 
             if strategy.pair_is_interesting(pair):
                 pair['strength'] = strategy.compute_strength(pair)
-                account['potential'].append(pair)
+                account.potential.append(pair)
 
         # Sort all potential positions of each account in terms of strength
         # Most extreme RSIs have priority (i.e. positions are opened first)
-        account['potential'].sort(key=lambda k: k['strength'], reverse=True)
+        account.potential.sort(key=lambda k: k['strength'], reverse=True)
 
-        # logger.debug('Opening potential positions %s...' % strategy.name)
+        logger.debug('Opening potential positions %s...' % strategy.name)
 
         # Then open the interesting positions
-        account = open_positions(account, strategy, macro_RSI)
-
-        accounts[i] = account
+        open_positions(account, strategy, macro_RSI)
+        logger.debug(account)
 
 
 def close_if_needed(account, strategy, pair, macro_RSI, logged_symbols):
@@ -145,12 +135,11 @@ def close_if_needed(account, strategy, pair, macro_RSI, logged_symbols):
     price = pair['price']
 
     # Search for an existing position for the given symbol.
-    for position in account['positions']:
+    for position in account.positions:
         if position['symbol'] == pair['symbol']:
             opened = True
             break
 
-    # Search for an existing position for the given symbol.
     if opened:
         # Log the pair, price, and RSI of the open asset.
         if pair['symbol'] not in logged_symbols:
@@ -163,30 +152,22 @@ def close_if_needed(account, strategy, pair, macro_RSI, logged_symbols):
 
         if needs_to_close:
             position = emulator.close_order(position, price)
-            account['positions'].remove(position)
-
-            if position['pnl'][0] >= 0:
-                account['wins'] += 1
-            else:
-                account['loses'] += 1
-
-            account['allocated'] -= position['size']  # Adjust allocated capital
-            account['available'] += position['size'] + position['pnl'][1]  # Recompound magic, baby
-
-            account['pnl'] += position['pnl'][1]  # Update net p&l in USDT
+            logger.debug(account)
+            account.log_closed_order(position)
+            logger.debug(account)
 
             # Percentage increase = (final_value - starting_value) / starting_value * 100
             percentage = \
-                (account['available'] + account['allocated'] - strategy.account_size) \
+                (account.available + account.allocated - strategy.account_size) \
                 / strategy.account_size * 100
 
-            logger.warning('🔮 Strat: ' + strategy.name)
+            logger.warning('🔮 Strategy: ' + strategy.name)
             logger.warning('{} Closed {} {} at {}. P&L: {:0.2f}%, ${:0.2f}'.format(
                 emojis[position['pnl'][0] >= 0], position['symbol'], position['side'],
                 position['exit_price'], position['pnl'][0], position['pnl'][1]
             ))
             logger.info('💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}'.format(
-                account['available'] + account['allocated'], account['allocated']
+                account.available + account.allocated, account.allocated
             ))
 
             # SL/TP check repeated here for post-analysis purposes
@@ -203,68 +184,61 @@ def close_if_needed(account, strategy, pair, macro_RSI, logged_symbols):
                 logger.info('🤝 TP hit')
 
             logger.info('💸 Total realized P&L: {:0.2f}%, ${:0.2f}'.format(
-                percentage, account['pnl']
+                percentage, account.pnl
             ))
-            logger.info('🤑 Wins: %d\t\t 🤔 Loses: %d' % (account['wins'], account['loses']))
+            logger.info('🤑 Wins: %d\t\t 🤔 Loses: %d' % (account.wins, account.loses))
 
             log_to_json(account, position)
-
-    return account
 
 
 def open_positions(account, strategy, macro_RSI):
     """Open positions based on RSI strength. Ensure no more than 1 position per symbol is opened."""
     # NOTE: expensive op: O(N) growth, where N=len(positions)
-    open_symbols = list(map(lambda p: p['symbol'], account['positions']))
+    open_symbols = list(map(lambda p: p['symbol'], account.positions))
 
-    for pair in account['potential']:
+    for pair in account.potential:
         # Do not open a new position if there's an existing position (based on the symbol)
         if pair['symbol'] in open_symbols:
             continue
 
-        position_size = strategy.determine_position_size(account['allocated'], account['available'])
+        position_size = strategy.determine_position_size(account.allocated, account.available)
 
         # This check is needed in the edge case of `strategy.account_risk > strategy.stop_loss`
-        if position_size <= account['available']:
+        if position_size <= account.available:
             # By this point there is a price signal due to scan() filtering via strategy['is_interesting']
             side = strategy.determine_side(pair, macro_RSI)
 
             # TODO: move code away from open_positions. Simply check macro_RSI before including
             #       pair in `account[potential]` at `close_and_open()`
-            if macro_RSI <= 30 and side == 'BUY':
-                logger.warning('⛔ Skipping false-flag (BUY in bearish market)')
+            if macro_RSI <= MACRO_RSI_MIN and side == 'BUY':
+                logger.debug('⛔ Skipping false-flag (BUY in bearish market)')
                 continue
-            elif macro_RSI >= 70 and side == 'SELL':
-                logger.warning('⛔ Skipping false-flag (SELL in bullish market)')
+            elif macro_RSI >= MACRO_RSI_MAX and side == 'SELL':
+                logger.debug('⛔ Skipping false-flag (SELL in bullish market)')
                 continue
 
             position = emulator.new_order(pair['symbol'], side, pair['price'], position_size, strategy)
-            account['positions'].append(position)
+            account.log_new_order(position)
 
-            account['available'] -= position_size  # Remove the position size from the available capital
-            account['allocated'] += position_size  # Add the position size to the allocated counter
-
-            logger.warning('🔮 Strat: ' + strategy.name)
+            logger.warning('🔮 Strategy: ' + strategy.name)
             logger.warning('{} Opened {} {} at {} with ${:0.2f}'.format(
                 emojis[side], pair['symbol'], side, pair['price'], position_size
             ))
             logger.info('🚫 SL: %0.5f\t\t 🤝 TP: %0.5f' % (position['stop_loss'], position['take_profit']))
             logger.info('💰 Unused capital: ${:0.2f}\t 💵 Allocated capital: ${:0.2f} | {} positions'.format(
-                account['available'], account['allocated'], len(account['positions'])
+                account.available, account.allocated, len(account.positions)
             ))
 
             log_to_json(account)
 
     # All potential positions have been opened so reset the array for the next round
-    account['potential'] = []
-
-    return account
+    account.potential = []
 
 
 def log_to_json(account, position=None):
     if position:
         # Parse opened positions file and add the last opened position
-        with open('%s/closed.json' % account['strategy'], 'r+') as fd:
+        with open('%s/closed.json' % account.strategy.name, 'r+') as fd:
             data = fd.read()
             closed = json.loads(data) + [position]
             fd.seek(0)
@@ -274,8 +248,8 @@ def log_to_json(account, position=None):
         return
 
     # If no argument passed, dump all open positions
-    with open('%s/opened.json' % account['strategy'], 'w') as fd:
-        fd.write(json.dumps(account['positions'], indent=4) + '\n')
+    with open('%s/opened.json' % account.strategy.name, 'w') as fd:
+        fd.write(json.dumps(account.positions, indent=4) + '\n')
 
 
 if __name__ == '__main__':

@@ -1,3 +1,6 @@
+from utils.constants import *
+
+
 class Strategy:
     """NOTE: every method assumes self.type == 'RSI'. This should be checked first for other indicators."""
     def __init__(self, defaults, strategy):
@@ -75,10 +78,10 @@ class Strategy:
         """Return 'SELL' if the asset should be shorted or 'BUY' if it should be longed."""
         if pair['RSI'] >= 50:
             # Follow the trend if RSI is extreme, else look for the reverse
-            side = 'BUY' if macro_RSI >= 70 else 'SELL'
+            side = 'BUY' if macro_RSI >= MACRO_RSI_MAX else 'SELL'
         else:
             # Idem
-            side = 'SELL' if macro_RSI <= 30 else 'BUY'
+            side = 'SELL' if macro_RSI <= MACRO_RSI_MIN else 'BUY'
 
         return side
 
@@ -90,7 +93,7 @@ class Strategy:
 
             price_signal = pair['RSI'] >= self.max
 
-            macro_close = True if macro_RSI <= 30 else False
+            macro_close = True if macro_RSI <= MACRO_RSI_MIN else False
 
             if self.profit_close:
                 price_signal = price_signal and pair['price'] >= position['entry_price']
@@ -100,7 +103,7 @@ class Strategy:
 
             price_signal = pair['RSI'] <= self.min
 
-            macro_close = True if macro_RSI >= 70 else False
+            macro_close = True if macro_RSI >= MACRO_RSI_MAX else False
 
             if self.profit_close:
                 price_signal = price_signal and pair['price'] <= position['entry_price']
