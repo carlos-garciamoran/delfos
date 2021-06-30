@@ -13,6 +13,8 @@ def close_order(position, exit_price):
     position['pnl'][0] *= 100
     position['pnl'][1] = position['size'] * position['pnl'][0] / 100
 
+    position['fee'] = position['size'] * 0.001
+
     return position
 
 
@@ -33,6 +35,7 @@ def new_order(symbol, side, entry_price, size, strategy):
         'stop_loss': stop_loss,
         'take_profit': take_profit,
         'pnl': [None, None],   # [%, USDT]
+        'fee': None,
         'opened_at': datetime.datetime.now().isoformat(),
         'closed_at': None,
     }

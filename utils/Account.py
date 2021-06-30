@@ -57,6 +57,6 @@ class Account:
             self.loses += 1
         
         self.allocated -= position['size']  # Adjust allocated capital
-        self.available += position['size'] + position['pnl'][1]  # Recompound magic, baby
+        self.available += position['size'] + position['pnl'][1] - position['fee']  # Recompound magic, baby
 
         self.pnl += position['pnl'][1]  # Update net P&L in USDT

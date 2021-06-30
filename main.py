@@ -166,6 +166,7 @@ def close_if_needed(account, strategy, pair, macro_RSI, logged_symbols):
                 emojis[position['pnl'][0] >= 0], position['symbol'], position['side'],
                 position['exit_price'], position['pnl'][0], position['pnl'][1]
             ))
+            logger.warning('[!] USDT fee = $%0.2f' % position['fee'])
             logger.info('💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}'.format(
                 account.available + account.allocated, account.allocated
             ))
