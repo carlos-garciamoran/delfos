@@ -8,9 +8,9 @@ from shutil import copyfile
 
 from loguru import logger
 
+from utils.Strategy import Strategy
 import utils.aggregator as aggregator
 import utils.emulator as emulator
-from utils.Strategy import Strategy
 
 
 accounts, strategies = [], []
@@ -54,7 +54,7 @@ def main():
         else:
             logger.debug('🐃🐃 SUPER BULLISH macro-trend (%0.2f)' % macro_RSI)
 
-        logger.debug('Closing positions which need so...')
+        logger.debug('🔎 Closing positions which need so...')
         close_and_open(pairs, macro_RSI)
 
 
@@ -101,7 +101,7 @@ def setup_accounts_and_strategies():
             'wins': 0,   # counter of profitable trades
         })
 
-        logger.info('Defaults:', defaults)
+        logger.info('Defaults: ' + str(defaults))
         logger.info(strategy)
         logger.info('Running %d strategies' % len(strategies))
 
@@ -285,6 +285,14 @@ if __name__ == '__main__':
 
     session = sys.argv[1]
 
+    Path('sessions/' + session).mkdir(parents=True, exist_ok=True)
+    copyfile('strategies.json', 'sessions/{}/strategies.json'.format(session))
+    os.chdir('sessions/' + session)
+
+    with open('history.csv', 'w') as fd1, open('macro-trend.csv', 'w') as fd2:
+        fd1.write('pair,price,RSI,timestamp\n')
+        fd2.write('RSI,timestamp\n')
+
     # Setup logging: use `debug()` for writing to STDOUT but NOT to logfile
     logger.remove()
     logger.add('tracking.log', level="INFO",
@@ -295,14 +303,6 @@ if __name__ == '__main__':
     )
 
     logger.info('Logging at: sessions/%s/' % session)
-
-    Path('sessions/' + session).mkdir(parents=True, exist_ok=True)
-    copyfile('strategies.json', 'sessions/{}/strategies.json'.format(session))
-    os.chdir('sessions/' + session)
-
-    with open('history.csv', 'w') as fd1, open('macro-trend.csv', 'w') as fd2:
-        fd1.write('pair,price,RSI,timestamp\n')
-        fd2.write('RSI,timestamp\n')
 
     try:
         main()
