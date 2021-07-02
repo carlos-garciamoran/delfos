@@ -48,7 +48,7 @@ def get_market_data(logger):
                 continue
             elif code == 429:
                 logger.error(error)
-                sleep(90)  # The rate-limit-exceeded block lasts 3 minutes for the Pro plan
+                sleep(60)  # The rate-limit-exceeded block lasts 3 minutes for the Pro plan
             else:
                 # Exit for unknown errors
                 return [], [], ['TAAPI', code, error]
@@ -56,6 +56,8 @@ def get_market_data(logger):
         logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(pair['price'], pair['RSI']))
         data.append(pair)
         RSIs.append(pair['RSI'])
+
+        sleep(0.05)
 
     macro_RSI = sum(RSIs) / len(RSIs)
 

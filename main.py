@@ -148,7 +148,8 @@ def close_if_needed(account, strategy, pair, macro_RSI, logged_symbols):
 
             logged_symbols.append(pair['symbol'])
 
-        needs_to_close = strategy.should_close(position, pair, macro_RSI)
+        # Causes returned for testing purposes
+        needs_to_close, causes = strategy.should_close(position, pair, macro_RSI)
 
         if needs_to_close:
             position = emulator.close_order(position, price)
@@ -166,23 +167,19 @@ def close_if_needed(account, strategy, pair, macro_RSI, logged_symbols):
                 emojis[position['pnl'][0] >= 0], position['symbol'], position['side'],
                 position['exit_price'], position['pnl'][0], position['pnl'][1]
             ))
-            logger.warning('[!] USDT fee = $%0.2f' % position['fee'])
+            logger.warning('🧨 Fee = $%0.2f' % position['fee'])
             logger.info('💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}'.format(
                 account.available + account.allocated, account.allocated
             ))
 
-            # SL/TP check repeated here for post-analysis purposes
-            if position['side'] == 'BUY':
-                stop_loss_hit = pair['price'] <= position['stop_loss']
-                take_profit_hit = pair['price'] >= position['take_profit']
-            else:
-                stop_loss_hit = pair['price'] >= position['stop_loss']
-                take_profit_hit = pair['price'] <= position['take_profit']
-
-            if stop_loss_hit:
-                logger.info('🚫 SL hit')
-            elif take_profit_hit:
+            if causes[0]:
+                logger.info('🎛  Macro signal')
+            elif causes[1]:
+                logger.info('⛔️ SL hit')
+            elif causes[2]:
                 logger.info('🤝 TP hit')
+            elif causes[3]:
+                logger.info('📞 Price signal hit')
 
             logger.info('💸 Total realized P&L: {:0.2f}%, ${:0.2f}'.format(
                 percentage, account.pnl
@@ -278,6 +275,8 @@ if __name__ == '__main__':
     )
 
     logger.info('Logging at: sessions/%s/' % session)
+    logger.info('MACRO_RSI_MAX: %d' % MACRO_RSI_MAX)
+    logger.info('MACRO_RSI_MIN: %d' % MACRO_RSI_MIN)
 
     try:
         main()

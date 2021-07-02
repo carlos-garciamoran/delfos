@@ -88,22 +88,22 @@ class Strategy:
     def should_close(self, position, pair, macro_RSI):
         """Return True if the RSI is overbought in a BUY position or oversold in a SELL position."""
         if position['side'] == 'BUY':
+            macro_close = True if macro_RSI <= MACRO_RSI_MIN else False
+
             stop_loss_hit = pair['price'] <= position['stop_loss']
             take_profit_hit = pair['price'] >= position['take_profit']
 
             price_signal = pair['RSI'] >= self.max
 
-            macro_close = True if macro_RSI <= MACRO_RSI_MIN else False
-
             if self.profit_close:
                 price_signal = price_signal and pair['price'] >= position['entry_price']
         else:
+            macro_close = True if macro_RSI >= MACRO_RSI_MAX else False
+
             stop_loss_hit = pair['price'] >= position['stop_loss']
             take_profit_hit = pair['price'] <= position['take_profit']
 
             price_signal = pair['RSI'] <= self.min
-
-            macro_close = True if macro_RSI >= MACRO_RSI_MAX else False
 
             if self.profit_close:
                 price_signal = price_signal and pair['price'] <= position['entry_price']
@@ -113,4 +113,8 @@ class Strategy:
             with open('macro-testing.log', 'a') as fd:
                 fd.write('%s,%s,%f\n' % (str(position), str(pair), macro_RSI))
 
-        return price_signal or stop_loss_hit or take_profit_hit or macro_close
+        # NOTE: return causes for testing purposes
+        return (
+            macro_close or stop_loss_hit or take_profit_hit or price_signal,
+            [macro_close, stop_loss_hit, take_profit_hit, price_signal]
+        )

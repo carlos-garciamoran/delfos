@@ -1,5 +1,5 @@
-MACRO_RSI_MAX = 65
-MACRO_RSI_MIN = 35
+MACRO_RSI_MAX = 70
+MACRO_RSI_MIN = 30
 
 # Blacklist of symbols ignored
 NON_TRADED_SYMBOLS = [

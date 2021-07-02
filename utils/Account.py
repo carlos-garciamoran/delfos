@@ -55,7 +55,7 @@ class Account:
             self.wins += 1
         else:
             self.loses += 1
-        
+
         self.allocated -= position['size']  # Adjust allocated capital
         self.available += position['size'] + position['pnl'][1] - position['fee']  # Recompound magic, baby
 

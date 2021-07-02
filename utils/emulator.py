@@ -13,7 +13,7 @@ def close_order(position, exit_price):
     position['pnl'][0] *= 100
     position['pnl'][1] = position['size'] * position['pnl'][0] / 100
 
-    position['fee'] = position['size'] * 0.001
+    position['fee'] = position['size'] * 0.0004
 
     return position
 
