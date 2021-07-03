@@ -257,6 +257,7 @@ if __name__ == '__main__':
 
     session = sys.argv[1]
 
+    # Create session directory and initialise files.
     Path('sessions/' + session).mkdir(parents=True, exist_ok=True)
     copyfile('strategies.json', 'sessions/{}/strategies.json'.format(session))
     os.chdir('sessions/' + session)
@@ -265,7 +266,7 @@ if __name__ == '__main__':
         fd1.write('pair,price,RSI,timestamp\n')
         fd2.write('RSI,timestamp\n')
 
-    # Setup logging: use `debug()` for writing to STDOUT but NOT to logfile
+    # Setup logging. Use `debug()` for writing to STDOUT but NOT to logfile.
     logger.remove()
     logger.add('tracking.log', level="INFO",
         format="{time:MM-DD HH:mm:ss.SSS} | {message}"
@@ -275,6 +276,10 @@ if __name__ == '__main__':
     )
 
     logger.info('Logging at: sessions/%s/' % session)
+
+    logger.info('EXCHANGE: %s' % EXCHANGE)
+    logger.info('INTERVAL: %s' % INTERVAL)
+    
     logger.info('MACRO_RSI_MAX: %d' % MACRO_RSI_MAX)
     logger.info('MACRO_RSI_MIN: %d' % MACRO_RSI_MIN)
 

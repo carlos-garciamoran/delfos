@@ -5,15 +5,21 @@ from dotenv import dotenv_values, load_dotenv
 from requests import Session
 from urllib import parse as urllib
 
+from utils.constants import *
+
 
 load_dotenv()
 
 APIKEY = dotenv_values()["BINANCE_APIKEY"]
 SECRETKEY = dotenv_values()["BINANCE_SECRETKEY"].encode()
 
-URL = 'https://api.binance.com'
-SAPI = URL + '/sapi/v1'
-V3   = URL + '/api/v3'
+if EXCHANGE == 'binanceusdm':
+    URL = 'https://fapi.binance.com'
+    V = URL + '/fapi/v1'
+else:
+    URL = 'https://api.binance.com'
+    V = URL + '/api/v3'
+    SAPI = URL + '/sapi/v1'
 
 s = Session()
 s.headers.update({ 'X-MBX-APIKEY': APIKEY })
@@ -53,7 +59,7 @@ def get_account_info():
 
 
 def get_price(symbol):
-    endpoint = V3 + '/ticker/price'
+    endpoint = V + '/ticker/price'
 
     resp = s.get(endpoint, params={ 'symbol': symbol })
     price = float(resp.json()['price'])
@@ -63,7 +69,7 @@ def get_price(symbol):
 
 def get_prices():
     """Get all symbol prices. Weight: 2."""
-    endpoint = V3 + '/ticker/price'
+    endpoint = V + '/ticker/price'
 
     resp = s.get(endpoint)
     prices = resp.json()

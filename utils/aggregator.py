@@ -24,8 +24,9 @@ def get_market_data(logger):
             'BULL' in symbol or \
             'BEAR' in symbol or \
             'UP' in symbol or \
-            'DOWN' in symbol:
-            # Skip uninsteresting symbols
+            'DOWN' in symbol or \
+            '_' in symbol:
+            # Skip uninsteresting symbols (dead/unlisted, sided, quarterlies)
             continue
 
         # NOTE: should refactor without using .find()
@@ -40,6 +41,7 @@ def get_market_data(logger):
             # Bad request: either dead coin listed in Binance or recent addition not recognised by TAAPI
             if code == 400:
                 logger.error('[!] Found potential dead/unlisted coin: ' + coin)
+                logger.error(error)
                 # NON_TRADED_SYMBOLS.append(coin + 'USDT')
                 continue
             # These codes are odd but happen, we just ignore them. 500's return an empty body
@@ -57,7 +59,7 @@ def get_market_data(logger):
         data.append(pair)
         RSIs.append(pair['RSI'])
 
-        sleep(0.05)
+        sleep(0.03)
 
     macro_RSI = sum(RSIs) / len(RSIs)
 
