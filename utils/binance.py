@@ -1,9 +1,9 @@
 import hmac
 import time
-from requests import Session
-from urllib import parse as urllib
 
 from dotenv import dotenv_values, load_dotenv
+from requests import Session
+from urllib import parse as urllib
 
 
 load_dotenv()

@@ -1,6 +1,7 @@
+from dotenv import dotenv_values, load_dotenv
 from requests import Session
 
-from dotenv import dotenv_values, load_dotenv
+from utils.constants import *
 
 
 load_dotenv()
@@ -11,14 +12,13 @@ TAAPI_APIKEY = dotenv_values()["TAAPI_APIKEY"]
 s = Session()
 s.params.update({
     'secret': TAAPI_APIKEY,
-    'exchange': 'binance',
-    'interval': '1m'  # 5m, 15m, 30m, 1h, 2h, 4h, 12h, 1d, 1w
+    'exchange': EXCHANGE,
+    'interval': INTERVAL
 })
 
 
 def get_RSI(symbol):
-    endpoint = URL + '/rsi'
-    resp = s.get(endpoint, params={ 'symbol': symbol })
+    resp = s.get(URL + '/rsi', params={ 'symbol': symbol })
 
     # TAAPI sometimes returns 5xx's
     if resp.status_code == 200:
