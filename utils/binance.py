@@ -52,36 +52,10 @@ def get_account_info():
     return resp.json(), resp.status_code
 
 
-# NOTE: unused; TODO: parse used JSON objects
-def get_book(symbol):
-    endpoint = V3 + '/ticker/bookTicker'
-    resp = s.get(endpoint, params={'symbol': symbol})
-
-    return resp.json(), resp.status_code
-
-
-# NOTE: unused; TODO: parse used JSON objects
-def get_candle(symbol):
-    endpoint = V3 + '/klines'
-    resp = s.get(endpoint, params={
-        'symbol': symbol, 'interval': '1h', 'limit': 1
-    })
-
-    return resp.json(), resp.status_code
-
-
-# NOTE: unused; TODO: parse used JSON objects
-def get_exchange_info():
-    endpoint = V3 + '/exchangeInfo'
-    resp = s.get(endpoint)
-
-    return resp.json(), resp.status_code
-
-
 def get_price(symbol):
     endpoint = V3 + '/ticker/price'
-    resp = s.get(endpoint, params={ 'symbol': symbol })
 
+    resp = s.get(endpoint, params={ 'symbol': symbol })
     price = float(resp.json()['price'])
 
     return price, resp.status_code
