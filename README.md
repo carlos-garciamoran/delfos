@@ -2,14 +2,22 @@
 
 ## Features
 - Leverages Binance and TAAPI APIs 🔌
-- Trades multiple strategies with dedicated accounts 💰
-- Manages risk
-    - Calculates position size
-    - Sets & manages SL and TP
 - Scans ~10 pairs per second ⏱
-- Tracks trades, realized P&L, and other factors 📐
-- Logs currently open and closed positions via JSON 💾
-- Calculates and logs average RSI of the market (macro-RSI) 📊
+- Trades multiple strategies with dedicated accounts 💰
+- Opens most interesting positions based on RSI strength 💡
+- Manages risk
+    - Calculates position size based on risk and SL
+    - Sets and manages SL & TP
+- Closes positions based on 📊
+    - RSI reverse
+    - macro-RSI (average RSI of the market)
+    - stop-loss
+    - take-profit
+- Tracks account balance, P&L, fees, and other factors 📐
+- Logs 💾
+    - currently open and closed positions in JSON
+    - price-data (symbol, price, and strength) in CSV
+    - macro-RSI in CSV
 
 ## Strategies
 
@@ -26,6 +34,7 @@
 - ~`type`~ | type of indicator
 
 **TODO**
+- Volume
 - RSI divergences
 - Heikin-Ashi candles
 - Momentum

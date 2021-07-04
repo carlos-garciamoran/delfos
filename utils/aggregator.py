@@ -1,23 +1,24 @@
 from datetime import datetime
 from time import sleep
 
+from models.Pair import Pair
+
 import utils.binance as binance
 import utils.taapi as taapi
-
 from utils.constants import *
 
 
 def get_market_data(logger):
     """Fetch prices from Binance and RSIs from TAAPI. Return prices, RSIs, and macro-RSI."""
-    data, RSIs = [], []
+    pairs = []
     prices, code, error = binance.get_prices()
 
     if code != 200:
         return [], [], ['Binance', code, error]
 
     # Parse the price for each interesting symbol and request the RSI of the latter
-    for pair in prices:
-        symbol = pair['symbol']
+    for price in prices:
+        symbol = price['symbol']
 
         if symbol[-4:] != 'USDT' or \
             symbol in NON_TRADED_SYMBOLS or \
@@ -31,11 +32,12 @@ def get_market_data(logger):
 
         # NOTE: should refactor without using .find()
         coin = symbol[:symbol.find('USDT')]
-        t_symbol = '{}/{}'.format(coin, symbol[-4:])
+        taapi_symbol = '{}/{}'.format(coin, symbol[-4:])
+
         logger.debug('💡 ' + coin)
 
-        pair['price'] = float(pair['price'])
-        pair['RSI'], code, error = taapi.get_RSI(t_symbol)
+        price = float(price['price'])
+        RSI, code, error = taapi.get_RSI(taapi_symbol)
 
         if code != 200:
             # Bad request: either dead coin listed in Binance or recent addition not recognised by TAAPI
@@ -55,15 +57,15 @@ def get_market_data(logger):
                 # Exit for unknown errors
                 return [], [], ['TAAPI', code, error]
 
-        logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(pair['price'], pair['RSI']))
-        data.append(pair)
-        RSIs.append(pair['RSI'])
+        logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(price, RSI))
+
+        pairs.append(Pair(symbol, price, RSI))
 
         sleep(0.03)
 
-    macro_RSI = sum(RSIs) / len(RSIs)
+    macro_RSI = sum(map(lambda p: p.RSI, pairs)) / len(pairs)
 
     with open('macro-trend.csv', 'a') as fd:
         fd.write('%f,%s\n' % (macro_RSI, datetime.now()))
 
-    return data, macro_RSI, None
+    return pairs, macro_RSI, None

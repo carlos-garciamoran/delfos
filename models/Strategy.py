@@ -1,3 +1,4 @@
+from models.Account import Account
 from utils.constants import *
 
 
@@ -7,6 +8,9 @@ class Strategy:
         # Required attributes
         self.name = strategy['name']
         self.min, self.max = strategy['constants'][0], strategy['constants'][1]
+
+        # Create dedicated trading account and link it to the strategy
+        self.account = Account(defaults['account_size'], self)
 
         # Optional attributes (defaults)
         self.account_risk = strategy['account_risk'] \
@@ -35,6 +39,7 @@ class Strategy:
             # Do not attempt to compare against unrelated types
             return NotImplemented
 
+        # NOTE: the account should not be compared
         return self.name == other.name and self.min == other.min and self.max == other.max \
             and self.profit_close == other.profit_close \
             and self.stop_loss == other.stop_loss and self.take_profit == other.take_profit \
@@ -55,63 +60,37 @@ class Strategy:
         )
 
 
-    def pair_is_interesting(self, pair):
-        """Return True if the RSI is overbought (RSI >= max) or oversold (RSI <= min)."""
-        return self.RSI_is_touched(pair) # and self.macro_trend_confirms()
-
-    def macro_trend_confirms(self):
-        pass
-
-    def RSI_is_touched(self, pair):
-        """Return True if the RSI is overbought (RSI >= max) or oversold (RSI <= min)."""
-        return pair['RSI'] >= self.max or pair['RSI'] <= self.min
-
-    def compute_strength(self, pair):
-        """Calculate the strength of the pair's indicator."""
-        return abs(50 - pair['RSI'])
-
     def determine_position_size(self, allocated, available):
         """Calculate the position size according to account and strategy parameters."""
         return (allocated + available) * self.account_risk / self.stop_loss
 
-    def determine_side(self, pair, macro_RSI):
-        """Return 'SELL' if the asset should be shorted or 'BUY' if it should be longed."""
-        if pair['RSI'] >= 50:
-            # Follow the trend if RSI is extreme, else look for the reverse
-            side = 'BUY' if macro_RSI >= MACRO_RSI_MAX else 'SELL'
-        else:
-            # Idem
-            side = 'SELL' if macro_RSI <= MACRO_RSI_MIN else 'BUY'
-
-        return side
-
     def should_close(self, position, pair, macro_RSI):
         """Return True if the RSI is overbought in a BUY position or oversold in a SELL position."""
-        if position['side'] == 'BUY':
+        if position.side == 'BUY':
             macro_close = True if macro_RSI <= MACRO_RSI_MIN else False
 
-            stop_loss_hit = pair['price'] <= position['stop_loss']
-            take_profit_hit = pair['price'] >= position['take_profit']
+            stop_loss_hit = pair.price <= position.stop_loss
+            take_profit_hit = pair.price >= position.take_profit
 
-            price_signal = pair['RSI'] >= self.max
+            price_signal = pair.RSI >= self.max
 
             if self.profit_close:
-                price_signal = price_signal and pair['price'] >= position['entry_price']
+                price_signal = price_signal and pair.price >= position.entry_price
         else:
             macro_close = True if macro_RSI >= MACRO_RSI_MAX else False
 
-            stop_loss_hit = pair['price'] >= position['stop_loss']
-            take_profit_hit = pair['price'] <= position['take_profit']
+            stop_loss_hit = pair.price >= position.stop_loss
+            take_profit_hit = pair.price <= position.take_profit
 
-            price_signal = pair['RSI'] <= self.min
+            price_signal = pair.RSI <= self.min
 
             if self.profit_close:
-                price_signal = price_signal and pair['price'] <= position['entry_price']
+                price_signal = price_signal and pair.price <= position.entry_price
 
         # NOTE: for testing purposes
         if macro_close:
-            with open('macro-testing.log', 'a') as fd:
-                fd.write('%s,%s,%f\n' % (str(position), str(pair), macro_RSI))
+            with open('macro-close.csv', 'a') as fd:
+                fd.write('%s,%s,%f\n' % (str(position.__dict__), str(pair.__dict__), macro_RSI))
 
         # NOTE: return causes for testing purposes
         return (
