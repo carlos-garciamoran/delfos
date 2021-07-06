@@ -1,6 +1,7 @@
 import hmac
 import time
 
+import numpy as np
 from dotenv import dotenv_values, load_dotenv
 from requests import Session
 from urllib import parse as urllib
@@ -56,6 +57,30 @@ def get_account_info():
     resp = s.get(endpoint, params=params)
 
     return resp.json(), resp.status_code
+
+
+def get_close_candles(symbol):
+    """
+    Get the last 499 kline/candlestick close values for a symbol.
+
+    Limit       Weight
+    [1,100)	    1
+    [100, 500)	2
+    [500, 1000]	5
+    > 1000	    10
+    """
+    closes = np.array([])
+    endpoint = V + '/klines'
+
+    # Get the last 499 candles to calculate a precise RSI & stay in weight 2
+    resp = s.get(endpoint, params={
+        'symbol': symbol, 'interval': INTERVAL, 'limit': 499
+    })
+
+    for candle in resp.json():
+        closes = np.append(closes, float(candle[4]))
+
+    return closes, resp.status_code
 
 
 def get_price(symbol):

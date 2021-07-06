@@ -1,20 +1,21 @@
 from datetime import datetime
-from time import sleep
 
 from models.Pair import Pair
 
 import utils.binance as binance
-import utils.taapi as taapi
+from talib import RSI as rsi
 from utils.constants import *
 
 
 def get_market_data(logger):
     """Fetch prices from Binance and RSIs from TAAPI. Return prices, RSIs, and macro-RSI."""
     pairs = []
+
+    # NOTE: this call is not really needed, it is only done to retrieve the active symbols.
     prices, code, error = binance.get_prices()
 
     if code != 200:
-        return [], [], ['Binance', code, error]
+        return [], [], ['/ticker', code, error]
 
     # Parse the price for each interesting symbol and request the RSI of the latter
     for price in prices:
@@ -30,38 +31,19 @@ def get_market_data(logger):
             # Skip uninsteresting symbols (dead/unlisted, sided, quarterlies)
             continue
 
-        # NOTE: should refactor without using .find()
-        coin = symbol[:symbol.find('USDT')]
-        taapi_symbol = '{}/{}'.format(coin, symbol[-4:])
+        logger.debug('💡 ' + symbol[:-4])
 
-        logger.debug('💡 ' + coin)
-
-        price = float(price['price'])
-        RSI, code, error = taapi.get_RSI(taapi_symbol)
+        closes, code = binance.get_close_candles(symbol)
 
         if code != 200:
-            # Bad request: either dead coin listed in Binance or recent addition not recognised by TAAPI
-            if code == 400:
-                logger.error('[!] Found potential dead/unlisted coin: ' + coin)
-                logger.error(error)
-                # NON_TRADED_SYMBOLS.append(coin + 'USDT')
-                continue
-            # These codes are odd but happen, we just ignore them. 500's return an empty body
-            elif code >= 500:  # known errors: 500, 502, 504, 524, 525
-                sleep(2)
-                continue
-            elif code == 429:
-                logger.error(error)
-                sleep(60)  # The rate-limit-exceeded block lasts 3 minutes for the Pro plan
-            else:
-                # Exit for unknown errors
-                return [], [], ['TAAPI', code, error]
+            return [], [], ['/kline', code, error]
+
+        # Last value of the array is the most recent
+        price, RSI = closes[-1], rsi(closes)[-1]
 
         logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(price, RSI))
 
         pairs.append(Pair(symbol, price, RSI))
-
-        sleep(0.03)
 
     macro_RSI = sum(map(lambda p: p.RSI, pairs)) / len(pairs)
 

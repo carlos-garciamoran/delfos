@@ -57,7 +57,8 @@ class Account:
         """Remove the position from its array and update the appropriate counters."""
         self.positions.remove(position)
 
-        if position.pnl[0] >= 0:
+        # A win is only such if the position's net P&L is positive
+        if position.pnl[1] - position.fee >= 0:
             self.wins += 1
         else:
             self.loses += 1

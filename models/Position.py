@@ -66,4 +66,4 @@ class Position:
         self.pnl[0] *= 100
         self.pnl[1] = self.size * self.pnl[0] / 100
 
-        self.fee = self.size * 0.0004   # TODO: do not hardcode fee rate: create a constant
+        self.fee = self.size * 0.0004 * 2   # TODO: do not hardcode fee rate: create a constant

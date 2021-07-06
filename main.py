@@ -41,7 +41,7 @@ def main():
             continue
 
         if HTTP_error:
-            logger.error('[!] %s API returned %d; exiting...' % (HTTP_error[0], HTTP_error[1]))
+            logger.error('[!] Binance %s returned %d; exiting...' % (HTTP_error[0], HTTP_error[1]))
             logger.error(HTTP_error[2])
             return
 
