@@ -1,0 +1,5 @@
+numpy==1.20.3
+requests==2.22.0
+TA_Lib==0.4.20
+loguru==0.5.3
+python-dotenv==0.18.0
