@@ -1,14 +1,14 @@
 from datetime import datetime
 
-from models.Pair import Pair
-
-import utils.binance as binance
 from talib import RSI as rsi
+
+from models.Pair import Pair
 from utils.constants import *
+import utils.binance as binance
 
 
 def get_market_data(logger):
-    """Fetch prices from Binance and RSIs from TAAPI. Return prices, RSIs, and macro-RSI."""
+    """Fetch prices from Binance and calculate RSIs. Return pairs and macro-RSI."""
     pairs = []
 
     # NOTE: this call is not really needed, it is only done to retrieve the active symbols.
@@ -17,7 +17,7 @@ def get_market_data(logger):
     if code != 200:
         return [], [], ['/ticker', code, error]
 
-    # Parse the price for each interesting symbol and request the RSI of the latter
+    # Parse the price for each symbol and request the candlesticks of the latter
     for price in prices:
         symbol = price['symbol']
 
@@ -39,7 +39,7 @@ def get_market_data(logger):
             return [], [], ['/kline', code, error]
 
         # Last value of the array is the most recent
-        price, RSI = closes[-1], rsi(closes)[-1]
+        price, RSI = float(price['price']), rsi(closes)[-1]
 
         logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(price, RSI))
 

@@ -64,10 +64,10 @@ def get_close_candles(symbol):
     Get the last 499 kline/candlestick close values for a symbol.
 
     Limit       Weight
-    [1,100)	    1
-    [100, 500)	2
-    [500, 1000]	5
-    > 1000	    10
+    [1,100)     1
+    [100, 500)  2
+    [500, 1000] 5
+    > 1000      10
     """
     closes = np.array([])
     endpoint = V + '/klines'

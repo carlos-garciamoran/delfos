@@ -6,14 +6,16 @@ class Position:
         self.symbol = pair.symbol  # symbol name
         self.entry_price = pair.price  # float
         self.side = side  # either 'SELL' or 'BUY'
-        self.size = size  # int
+        self.size = size  # in USDT
 
-        # Initialised attributes
         self.opened_at = datetime.now().isoformat()
+
+        # TODO: do not hardcode taker fee rate: create a constant
+        self.fee = self.size * 0.00036  # opening fee in USDT
 
         self.exit_price = None
         self.closed_at = None
-        self.fee = None  # fee in USDT
+
         self.pnl = [None, None]  # [percentage, USDT]
 
         # NOTE: conditional not placed in method to save function call. Position objects are created often.
@@ -66,4 +68,5 @@ class Position:
         self.pnl[0] *= 100
         self.pnl[1] = self.size * self.pnl[0] / 100
 
-        self.fee = self.size * 0.0004 * 2   # TODO: do not hardcode fee rate: create a constant
+        # TODO: do not hardcode maker fee rate: create a constant
+        self.fee += (self.size + self.pnl[1]) * 0.00018
