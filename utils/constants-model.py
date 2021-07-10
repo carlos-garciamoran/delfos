@@ -35,4 +35,4 @@ NON_TRADED_SYMBOLS = [
 ]
 
 for i in range(len(NON_TRADED_SYMBOLS)):
-    NON_TRADED_SYMBOLS[i] += 'USDT'
+    NON_TRADED_SYMBOLS[i] += '/USDT'

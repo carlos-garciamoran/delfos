@@ -15,12 +15,13 @@ import utils.aggregator as aggregator
 from utils.constants import *
 
 
-accounts, strategies = [], []
+accounts, strategies, symbols = [], [], []
 macro_RSI = 0.0
+real_loaded = False
 
 emojis = {
     True:  '💎', False:  '❌',
-    'BUY': '🐃', 'SELL': '🐻',
+    'buy': '🐃', 'sell': '🐻',
 }
 
 
@@ -32,10 +33,10 @@ def main():
 
         logger.debug('📡 Aggregating market data...')
 
-        # Catch TAAPI and openssl socket connection errors
+        # Catch openssl socket connection errors
         try:
-            pairs, macro_RSI, HTTP_error = aggregator.get_market_data(logger)
-        except (KeyError, OSError, ZeroDivisionError) as e:
+            pairs, macro_RSI, HTTP_error = aggregator.get_market_data(logger, symbols)
+        except (KeyError, OSError) as e:
             logger.error('[!] Crashed on market data request, dumping error...')
             logger.error(e)
             continue
@@ -61,25 +62,32 @@ def main():
 
 def setup_accounts_and_strategies():
     """Parse JSON strategies and set up an account and directory for new ones."""
+    global real_loaded, symbols
+
     with open('strategies.json') as fd:
         data = json.loads(fd.read())
 
-    defaults, strategies_data = data['defaults'], data['strategies']
+    for strategy_data in data['strategies']:
+        # HACK: fix this fucked up logic
+        # Only try to create a real strategy if it has not been created before.
+        if 'REAL' not in list(strategy_data) or not real_loaded:
+            try:
+                strategy = Strategy(data['defaults'], strategy_data)
+                account = strategy.account
 
-    for strategy_data in strategies_data:
-        try:
-            strategy = Strategy(defaults, strategy_data)
-            account = strategy.account
-        except KeyError as e:
-            logger.error('[!] Error parsing %s' % strategy_data['name'])
-            logger.error('[!] Need to add strategy parameter %s, skipping...' % e)
-            continue
+                if strategy.real:
+                    symbols = list(strategy.markets)
+                    real_loaded = True
+            except KeyError as e:
+                logger.error('[!] Error parsing %s' % strategy_data['name'])
+                logger.error('[!] Need to add strategy parameter %s, skipping...' % e)
+                continue
 
-        # TODO: check name as well?
-        # Skip already existing strategies so they are not reset
-        name = strategy.name
+        # Skip already existing and real strategies so they are not reset
         if strategy in strategies:
             continue
+
+        name = strategy.name
 
         Path(name).mkdir(exist_ok=True)  # Each strategy gets its own directory
 
@@ -90,11 +98,9 @@ def setup_accounts_and_strategies():
             fd2.write('[]\n')
 
         # NOTE: `available` is not set by strategy, it only uses the default
-        # Add new account and strategy
         accounts.append(account)
         strategies.append(strategy)
 
-        logger.info('Defaults: ' + str(defaults))
         logger.info(strategy)
         logger.info('Running %d strategies' % len(strategies))
 
@@ -132,7 +138,7 @@ def trade(pairs):
                 pair.compute_strength()
                 account.potential.append(pair)
 
-        # Then, sort potential positions in terms of RSI strength, most extremes get priority (i.e. positions are opened first)
+        # Then, sort potential positions so most extreme RSIs get priority (i.e. positions are opened first)
         account.potential.sort(key=lambda p: p.strength, reverse=True)
 
         logger.debug('🔎 Trying to open %d potential positions...' % len(account.potential))
@@ -154,17 +160,18 @@ def close_if_needed(position, pair, strategy):
     needs_to_close, causes = strategy.should_close(position, pair, macro_RSI)
 
     if needs_to_close:
-        position.close(price)
+        position.close(price, strategy)
 
+        # HACK: for real accounts, could use balance from fetch_balance()
         account.log_closed_order(position)
 
-        # Optimization happenning here, baby ;)
+        # Optimization happening here, baby ;)
         msg = '\n{:>4} 🔮 Strategy: {}\n' \
             '{:>6} Closed {} {} at {}\n' \
             '{:>4} 💸 P&L: {:0.2f}%, ${:0.2f}\n' \
             '{:>4} 🧨 Fee = ${:0.2f}\n'.format(
                 '', strategy.name,
-                emojis[position.pnl[0] >= 0], position.symbol, position.side, price,
+                emojis[position.pnl[0] >= 0], position.symbol, position.side, position.exit_price,
                 '', position.pnl[0], position.pnl[1],
                 '', position.fee
             )
@@ -217,10 +224,10 @@ def open_new_positions(strategy, opened_positions):
 
             # HACK: move code away from open_positions. Simply check macro_RSI before including
             #       pair in `account.potential` at `trade()`
-            if macro_RSI <= MACRO_RSI_MIN and side == 'BUY':
+            if macro_RSI <= MACRO_RSI_MIN and side == 'buy':
                 logger.debug('⛔ Skipping false-flag (BUY in bearish market)')
                 continue
-            elif macro_RSI >= MACRO_RSI_MAX and side == 'SELL':
+            elif macro_RSI >= MACRO_RSI_MAX and side == 'sell':
                 logger.debug('⛔ Skipping false-flag (SELL in bullish market)')
                 continue
 
@@ -229,12 +236,12 @@ def open_new_positions(strategy, opened_positions):
 
             msg += '\n{:>6} {} {} at {} with ${:0.2f}\n' \
                 '{:>4} 🚫 SL: {:0.5f}\t\t 🤝 TP: {:0.5f}\n'.format(
-                emojis[side], pair.symbol, side, pair.price, size,
+                emojis[side], pair.symbol, side, position.entry_price, position.size,
                 '', position.stop_loss, position.take_profit,
             )
 
     # Only log when msg has been appended some content
-    if len(msg) > 46:
+    if len(msg) > 55:
         msg += '\n{:>4} 💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}\n'.format(
             '', account.available + account.allocated - account.fees, account.allocated
         )

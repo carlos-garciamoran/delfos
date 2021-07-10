@@ -1,5 +1,6 @@
-numpy==1.20.3
-requests==2.22.0
+ccxt==1.52.69
+numpy==1.21.0
 TA_Lib==0.4.20
 loguru==0.5.3
+requests==2.22.0
 python-dotenv==0.18.0

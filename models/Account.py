@@ -2,11 +2,11 @@ import json
 
 
 class Account:
-    def __init__(self, initial_size, strategy):
+    def __init__(self, strategy):
         self.strategy = strategy  # Strategy object associated with the account
 
         self.allocated = 0.0  # capital allocated in positions (USDT)
-        self.available = initial_size  # liquid unused capital + pnl - fees
+        self.available = strategy.account_size  # liquid unused capital + pnl - fees
 
         # Arrays storing Position objects
         self.positions = []  # currently open positions

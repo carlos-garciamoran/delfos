@@ -77,10 +77,14 @@ def get_close_candles(symbol):
         'symbol': symbol, 'interval': INTERVAL, 'limit': 499
     })
 
+    # Basic error checking
+    if resp.status_code != 200:
+        return [], resp.status_code, resp.text
+
     for candle in resp.json():
         closes = np.append(closes, float(candle[4]))
 
-    return closes, resp.status_code
+    return closes, resp.status_code, None
 
 
 def get_price(symbol):

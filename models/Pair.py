@@ -3,9 +3,9 @@ from utils.constants import *
 
 class Pair:
     def __init__(self, symbol, price, RSI):
-        self.symbol = symbol  # symbol name
-        self.price = price    # price returned by Binance
-        self.RSI = RSI        # RSI calculated by TAAPI
+        self.symbol = symbol
+        self.price = price
+        self.RSI = RSI
 
         self.strength = 0.0   # strength of the RSI
 
@@ -25,9 +25,9 @@ class Pair:
         self.strength = abs(50 - self.RSI)
 
     def determine_position_side(self, macro_RSI):
-        """Return 'SELL' if the asset should be shorted or 'BUY' if it should be longed."""
+        """Return 'sell' if the asset should be shorted or 'buy' if it should be longed."""
         # In both cases, follow the trend if the RSI is extreme, else look for the reverse
         if self.RSI >= 50:
-            return 'BUY' if macro_RSI >= MACRO_RSI_MAX else 'SELL'
+            return 'buy' if macro_RSI >= MACRO_RSI_MAX else 'sell'
 
-        return 'SELL' if macro_RSI <= MACRO_RSI_MIN else 'BUY'
+        return 'sell' if macro_RSI <= MACRO_RSI_MIN else 'buy'

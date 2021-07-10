@@ -12,7 +12,8 @@
         {
             "name": "30_70_SL_5",
             "constants": [30, 70],
-            "take_profit": 0.01
+            "take_profit": 0.01,
+            "REAL": true
         },
         {
             "name": "30_70_SL_5_profit",
