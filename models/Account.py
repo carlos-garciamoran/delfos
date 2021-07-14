@@ -1,12 +1,17 @@
 import json
+import math
 
 
 class Account:
-    def __init__(self, strategy):
+    def __init__(self, strategy, initial_size):
         self.strategy = strategy  # Strategy object associated with the account
 
         self.allocated = 0.0  # capital allocated in positions (USDT)
-        self.available = strategy.account_size  # liquid unused capital + pnl - fees
+        self.available = initial_size  # free capital + realized pnl - fees
+        self.INITIAL_SIZE = initial_size  # constant variable
+        self.free_trading_slots = math.floor(
+            self.available * strategy.stop_loss * strategy.risk * 100
+        )
 
         # Arrays storing Position objects
         self.positions = []  # currently open positions
@@ -34,12 +39,12 @@ class Account:
 
     def __str__(self):
         return '''{}
-    allocated = {}
-    available = {}
+    allocated = {:0.4f}
+    available = {:0.4f}
     positions = {}
     potential = {}
-    fees      = {}
-    pnl       = {}
+    fees      = {:0.4f}
+    pnl       = {:0.4f}
     wins, loses = {}, {}\n'''.format(
         self.strategy.name, self.allocated, self.available, len(self.positions), len(self.potential),
         self.fees, self.pnl, self.wins, self.loses
@@ -52,6 +57,10 @@ class Account:
 
         self.allocated += position.size
         self.available -= position.size
+
+        self.free_trading_slots = math.floor(
+            self.available * self.strategy.stop_loss * self.strategy.risk * 100
+        )
 
     def log_closed_order(self, position):
         """Remove the position from its array and update the appropriate counters."""
@@ -69,6 +78,10 @@ class Account:
         self.fees += position.fee
         self.pnl += position.pnl[1]
 
+        self.free_trading_slots = math.floor(
+            self.available * self.strategy.stop_loss * self.strategy.risk * 100
+        )
+
     def log_positions_to_json(self, position=None):
         """Append the last closed position to closed.json or dump open positions to opened.json."""
         if position:
@@ -76,7 +89,7 @@ class Account:
                 data = fd.read()
                 closed = json.loads(data) + [position.__dict__]
                 fd.seek(0)
-                fd.write(json.dumps(closed, indent=4) + '\n')
+                fd.write(json.dumps(closed, indent=4, default=str) + '\n')
                 fd.truncate()
 
             return
@@ -86,4 +99,4 @@ class Account:
             raw_positions.append(pos.__dict__)
 
         with open('%s/opened.json' % self.strategy.name, 'w') as fd:
-            fd.write(json.dumps(raw_positions, indent=4) + '\n')
+            fd.write(json.dumps(raw_positions, indent=4, default=str) + '\n')

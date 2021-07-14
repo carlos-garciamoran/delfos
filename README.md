@@ -1,7 +1,7 @@
 # delfos 🔮 | Cryptocurrency Trading Bot
 
 ## Features
-- Leverages Binance and TAAPI APIs 🔌
+- Leverages Binance USD-M Futures API 🔌
 - Scans ~10 pairs per second ⏱
 - Trades multiple strategies with dedicated accounts 💰
 - Opens most interesting positions based on RSI strength 💡

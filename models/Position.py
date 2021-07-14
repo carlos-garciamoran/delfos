@@ -10,14 +10,14 @@ class Position:
             base_size = size / pair.price  # float in base currency
 
             order = strategy.trader.create_order(pair.symbol, 'MARKET', side, base_size)
-            self.opened_at = datetime.now().isoformat()
+            self.opened_at = datetime.now()
             self.entry_price = order['price']  # float in quote currency (USDT)
             self.size = order['cost']  # float in quote currency (USDT)
 
             self.set_SL_and_TP(strategy)  # NOTE: called here due to dependence on self.entry_price
             inverted_side = 'sell' if side == 'buy' else 'buy'
 
-            # TODO: create SL & TP orders together with market order overriding unified API params
+            # TODO: could create order with the returned base size
             self.sl_id = strategy.trader.create_order(
                 self.symbol, 'STOP_MARKET', inverted_side, base_size, None, {'stopPrice': self.stop_loss}
             )['id']
@@ -26,8 +26,8 @@ class Position:
             )['id']
         else:
             self.size = size  # float in quote currency (USDT)
-            self.opened_at = datetime.now().isoformat()
-            self.entry_price = pair.price   # float price in quote currency
+            self.opened_at = datetime.now()
+            self.entry_price = pair.price  # float price in quote currency
 
             self.set_SL_and_TP(strategy)
 
@@ -37,28 +37,16 @@ class Position:
 
         self.pnl = [None, None]  # [percentage, USDT]
 
-    def __eq__(self, other):
-        if not isinstance(other, Position):
-            # Do not attempt to compare against unrelated types
-            return NotImplemented
-
-        # Only check the necessary attributes
-        return self.symbol == other.symbol \
-            and self.entry_price == other.entry_price \
-            and self.size == other.size \
-            and self.opened_at == other.opened_at
-
     def __str__(self):
-        return '''{}
-    side = {}
-    size = {}
+        return '''{} {}
+    size        = {}
     entry_price = {} 
-    opened_at = {}
-    exit_price = {}
-    closed_at = {}
-    fee = {}
-    pnl = {}
-    stop_loss = {}
+    opened_at   = {}
+    exit_price  = {}
+    closed_at   = {}
+    fee         = {}
+    pnl         = {}
+    stop_loss   = {}
     take_profit = {}\n'''.format(
         self.symbol, self.side, self.size, self.entry_price, self.opened_at,
         self.exit_price, self.closed_at, self.fee, self.pnl, self.stop_loss, self.take_profit
@@ -74,36 +62,49 @@ class Position:
             self.stop_loss = self.entry_price + (self.entry_price * strategy.stop_loss)
             self.take_profit = self.entry_price - (self.entry_price * strategy.take_profit)
 
-    def close(self, exit_price, strategy):
+    def close(self, exit_price, strategy, causes):
         """Mark the position as closed at the given exit_price and calculate P&L and fees."""
         if strategy.real:
-            inverted_side = 'sell' if self.side == 'buy' else 'buy'
-            size = self.size / self.entry_price
+            # Close all symbol orders (i.e. TP & SL) with a single call (weight = 1)
+            strategy.trader.fapiPrivate_delete_allopenorders({
+                'symbol': self.symbol.replace('/', '')
+            })
 
-            order = strategy.trader.create_order(self.symbol, 'MARKET', inverted_side, size)
+            # Order may have already been closed by exchange due to TP or SL being hit
+            if not (causes[0] or causes[1]):
+                # Neither SL or TP have been hit, then create a market order for closing the position
+                inverted_side = 'sell' if self.side == 'buy' else 'buy'
+                size = self.size / self.entry_price
+
+                # Close the order manually (weight = 1)
+                order = strategy.trader.create_order(self.symbol, 'MARKET', inverted_side, size)
+            else:
+                # NOTE: this assumes order['status'] == 'FILLED'
+                # Retrieve closing price from SL or TP to log exit price precisely (weight = 1)
+                order = strategy.trader.fetch_order(
+                    self.sl_id if causes[0] else self.tp_id,
+                    self.symbol
+                )
+
             self.exit_price = order['price']
-            self.fee += (order['cost'] * 0.00036)
-            print(order)
-
-            # NOTE: SL & TP orders are separate from the main one so they need to be manually cancelled
-            strategy.trader.cancel_order(self.sl_id, self.symbol)
-            strategy.trader.cancel_order(self.tp_id, self.symbol)
+            self.fee += order['cost'] * 0.00036
         else:
             self.exit_price = exit_price
 
-        self.closed_at = datetime.now().isoformat()
+        self.closed_at = datetime.now()
 
         if self.side == 'buy':
             self.pnl[0] = (self.exit_price - self.entry_price) / self.entry_price
         else:
             self.pnl[0] = (self.entry_price - self.exit_price) / self.exit_price
 
-        # HACK: could probably optimise by doing
+        # HACK: optimise by doing
         #       self.pnl[1] = self.size * self.pnl[0]
         #       self.pnl[0] *= 100
         self.pnl[0] *= 100
         self.pnl[1] = self.size * self.pnl[0] / 100
 
+        # HACK: create a function for calculating P&L + call it inside both if and else
         # Ugly & wet but needed; P&L needs to be calculated after the exit price
         if not strategy.real:
             self.fee += (self.size + self.pnl[1]) * 0.00036

@@ -1,8 +1,8 @@
 {
     "defaults": {
-        "account_risk": 0.01,
         "account_size": 1000.0,
-
+        
+        "risk": 0.01,
         "stop_loss": 0.05,
         "take_profit": 0.04,
         "profit_close": false

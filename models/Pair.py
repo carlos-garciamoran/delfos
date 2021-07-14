@@ -11,8 +11,8 @@ class Pair:
 
     def __str__(self):
         return '''{}
-    price = {}
-    RSI = {}
+    price    = {}
+    RSI      = {}
     strength = {}\n'''.format(self.symbol, self.price, self.RSI, self.strength)
 
 

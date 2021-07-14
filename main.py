@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from shutil import copyfile
 
+import ccxt
 from loguru import logger
 
 from models.Position import Position
@@ -28,9 +29,9 @@ emojis = {
 def main():
     global macro_RSI
 
-    while True:
-        setup_accounts_and_strategies()
+    setup_accounts_and_strategies()
 
+    while True:
         logger.debug('📡 Aggregating market data...')
 
         # Catch openssl socket connection errors
@@ -46,23 +47,12 @@ def main():
             logger.error(HTTP_error[2])
             return
 
-        if macro_RSI <= 30:
-            logger.debug('🐻🐻 SUPER BEARISH macro-trend (%0.2f)' % macro_RSI)
-        elif macro_RSI > 30 and macro_RSI <= 42:
-            logger.debug('🐻 BEARISH macro-trend (%0.2f)' % macro_RSI)
-        elif macro_RSI > 42 and macro_RSI <= 58:
-            logger.debug('⚖️  NEUTRAL macro-trend (%0.2f)' % macro_RSI)
-        elif macro_RSI > 58 and macro_RSI <= 70:
-            logger.debug('🐃 BULLISH macro-trend (%0.2f)' % macro_RSI)
-        else:
-            logger.debug('🐃🐃 SUPER BULLISH macro-trend (%0.2f)' % macro_RSI)
-
         trade(pairs)
 
 
 def setup_accounts_and_strategies():
     """Parse JSON strategies and set up an account and directory for new ones."""
-    global real_loaded, symbols
+    global symbols
 
     with open('strategies.json') as fd:
         data = json.loads(fd.read())
@@ -70,21 +60,15 @@ def setup_accounts_and_strategies():
     for strategy_data in data['strategies']:
         # HACK: fix this fucked up logic
         # Only try to create a real strategy if it has not been created before.
-        if 'REAL' not in list(strategy_data) or not real_loaded:
-            try:
-                strategy = Strategy(data['defaults'], strategy_data)
-                account = strategy.account
+        try:
+            strategy = Strategy(data['defaults'], strategy_data)
+            account = strategy.account
 
-                if strategy.real:
-                    symbols = list(strategy.markets)
-                    real_loaded = True
-            except KeyError as e:
-                logger.error('[!] Error parsing %s' % strategy_data['name'])
-                logger.error('[!] Need to add strategy parameter %s, skipping...' % e)
-                continue
-
-        # Skip already existing and real strategies so they are not reset
-        if strategy in strategies:
+            if strategy.real:
+                symbols = list(strategy.markets)
+        except KeyError as e:
+            logger.error('[!] Error parsing %s' % strategy_data['name'])
+            logger.error('[!] Need to add strategy parameter %s, skipping...' % e)
             continue
 
         name = strategy.name
@@ -160,7 +144,7 @@ def close_if_needed(position, pair, strategy):
     needs_to_close, causes = strategy.should_close(position, pair, macro_RSI)
 
     if needs_to_close:
-        position.close(price, strategy)
+        position.close(price, strategy, causes)
 
         # HACK: for real accounts, could use balance from fetch_balance()
         account.log_closed_order(position)
@@ -177,20 +161,20 @@ def close_if_needed(position, pair, strategy):
             )
 
         if causes[0]:
-            msg += '{:>5}🎛  Macro signal\n'.format('')
-        elif causes[1]:
             msg += '{:>5}⛔️ SL hit\n'.format('')
-        elif causes[2]:
+        elif causes[1]:
             msg += '{:>5}🤝 TP hit\n'.format('')
+        elif causes[2]:
+            msg += '{:>5}🎛  Macro signal\n'.format('')
         elif causes[3]:
             msg += '{:>5}📞 Price signal hit\n'.format('')
 
         logger.warning(msg)
 
         # Percentage increase = (final_value - starting_value) / starting_value * 100
-        percentage = \
-            (account.available + account.allocated - strategy.account_size) \
-            / strategy.account_size * 100
+        percentage = (
+            account.available + account.allocated - account.INITIAL_SIZE
+            ) / account.INITIAL_SIZE * 100
 
         logger.info(
             '\n{:>4} 💸 Total realized P&L: {:0.2f}%, ${:0.2f}\n'
@@ -217,13 +201,17 @@ def open_new_positions(strategy, opened_positions):
 
         size = strategy.determine_position_size(account.allocated, account.available)
 
-        # This check is needed in the edge case of `strategy.account_risk > strategy.stop_loss`
-        if size <= account.available:
+        logger.debug('WILL OPEN | Positions: %d;  Free slots: %d' % (
+            len(account.positions), account.free_trading_slots
+        ))
+        # len(account.positions) < account.max_trading_slots
+        # This check is needed in the edge case of `strategy.risk > strategy.stop_loss`
+        if size <= account.available and account.free_trading_slots >= 1:
             # By this point there is a price signal due to pair.is_interesting()
             side = pair.determine_position_side(macro_RSI)
 
             # HACK: move code away from open_positions. Simply check macro_RSI before including
-            #       pair in `account.potential` at `trade()`
+            #       pair in `account.potential` at `trade()`. Need to know `side` in advance
             if macro_RSI <= MACRO_RSI_MIN and side == 'buy':
                 logger.debug('⛔ Skipping false-flag (BUY in bearish market)')
                 continue
@@ -231,8 +219,27 @@ def open_new_positions(strategy, opened_positions):
                 logger.debug('⛔ Skipping false-flag (SELL in bullish market)')
                 continue
 
-            position = Position(pair, side, size, strategy)
+            # HACK: improve this error handling logic
+            try:
+                position = Position(pair, side, size, strategy)
+            except ccxt.InsufficientFunds as e:
+                logger.error('[!] Crashed on Binance order opening %s %s with %0.2f: %s' % (
+                    side, pair.symbol, size, e
+                ))
+                logger.info(size - (size*.1))
+                logger.info(account)
+                continue
+
+                # TODO WARNING: SL & TP are not been created here!!
+                # When margin is insufficient, try opening the position with smaller size (-10%).
+                # position = Position(pair, side, size - (size*.1), strategy)
+
+            logger.debug(position)
             account.log_new_order(position)
+
+            logger.debug('OPENED | Positions: %d;  Free slots: %d' % (
+                len(account.positions), account.free_trading_slots
+            ))
 
             msg += '\n{:>6} {} {} at {} with ${:0.2f}\n' \
                 '{:>4} 🚫 SL: {:0.5f}\t\t 🤝 TP: {:0.5f}\n'.format(
@@ -242,8 +249,8 @@ def open_new_positions(strategy, opened_positions):
 
     # Only log when msg has been appended some content
     if len(msg) > 55:
-        msg += '\n{:>4} 💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}\n'.format(
-            '', account.available + account.allocated - account.fees, account.allocated
+        msg += '\n{:>4} 💰 Available capital: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}\n'.format(
+            '', account.available, account.allocated
         )
         logger.warning(msg)
 
@@ -285,3 +292,6 @@ if __name__ == '__main__':
         main()
     except KeyboardInterrupt:
         logger.warning('Heard CTRL-C, quitting...')
+    except Exception as e:
+        logger.error('[!!] Crashed on unhandled error, dumping exception...')
+        logger.error(e)
