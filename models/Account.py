@@ -55,8 +55,8 @@ class Account:
         """Add the position to its array and update the appropriate counters."""
         self.positions.append(position)
 
-        self.allocated += position.size
-        self.available -= position.size
+        self.allocated += position.cost
+        self.available -= position.cost
 
         self.free_trading_slots = math.floor(
             self.available * self.strategy.stop_loss * self.strategy.risk * 100
@@ -72,8 +72,8 @@ class Account:
         else:
             self.loses += 1
 
-        self.allocated -= position.size  # Adjust allocated capital
-        self.available += position.size + position.pnl[1] - position.fee  # Recompound magic, baby
+        self.allocated -= position.cost  # Adjust allocated capital
+        self.available += position.cost + position.pnl[1] - position.fee  # Recompound magic, baby
 
         self.fees += position.fee
         self.pnl += position.pnl[1]

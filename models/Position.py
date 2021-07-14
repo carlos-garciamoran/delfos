@@ -2,36 +2,41 @@ from datetime import datetime
 
 
 class Position:
-    def __init__(self, pair, side, size, strategy):
+    def __init__(self, pair, side, cost, strategy):
         self.symbol = pair.symbol  # symbol name
         self.side = side           # 'buy', 'sell'
 
         if strategy.real:
-            base_size = size / pair.price  # float in base currency
+            tentative_size = cost / pair.price  # base currency (COIN)
+            order = strategy.trader.create_order(
+                pair.symbol, 'MARKET', side, tentative_size
+            )
 
-            order = strategy.trader.create_order(pair.symbol, 'MARKET', side, base_size)
             self.opened_at = datetime.now()
-            self.entry_price = order['price']  # float in quote currency (USDT)
-            self.size = order['cost']  # float in quote currency (USDT)
+            self.entry_price = order['price']  # quote currency (USDT)
+            self.cost = order['cost']    # quote currency (USDT)
+            self.size = order['filled']  # base currency (COIN)
 
             self.set_SL_and_TP(strategy)  # NOTE: called here due to dependence on self.entry_price
             inverted_side = 'sell' if side == 'buy' else 'buy'
 
-            # TODO: could create order with the returned base size
+            # Create orders with the returned base size
             self.sl_id = strategy.trader.create_order(
-                self.symbol, 'STOP_MARKET', inverted_side, base_size, None, {'stopPrice': self.stop_loss}
+                self.symbol, 'STOP_MARKET', inverted_side, self.size, None, {'stopPrice': self.stop_loss}
             )['id']
             self.tp_id = strategy.trader.create_order(
-                self.symbol, 'TAKE_PROFIT_MARKET', inverted_side, base_size, None, {'stopPrice': self.take_profit}
+                self.symbol, 'TAKE_PROFIT_MARKET', inverted_side, self.size, None, {'stopPrice': self.take_profit}
             )['id']
         else:
-            self.size = size  # float in quote currency (USDT)
             self.opened_at = datetime.now()
-            self.entry_price = pair.price  # float price in quote currency
+            self.entry_price = pair.price
+            self.cost = cost
+            self.size = cost / pair.price
 
             self.set_SL_and_TP(strategy)
+            self.sl_id, self.tp_id = None, None
 
-        self.fee = self.size * 0.00036  # opening taker fee in USDT
+        self.fee = self.cost * 0.00036  # opening taker fee in USDT
         self.exit_price = None
         self.closed_at = None
 
@@ -39,17 +44,18 @@ class Position:
 
     def __str__(self):
         return '''{} {}
+    cost        = {}
     size        = {}
-    entry_price = {} 
     opened_at   = {}
+    entry_price = {} 
+    stop_loss   = {}
+    take_profit = {}
     exit_price  = {}
     closed_at   = {}
     fee         = {}
-    pnl         = {}
-    stop_loss   = {}
-    take_profit = {}\n'''.format(
-        self.symbol, self.side, self.size, self.entry_price, self.opened_at,
-        self.exit_price, self.closed_at, self.fee, self.pnl, self.stop_loss, self.take_profit
+    pnl         = {}\n'''.format(self.symbol, self.side,
+        self.cost, self.size, self.opened_at, self.entry_price, self.stop_loss, self.take_profit,
+        self.exit_price, self.closed_at, self.fee, self.pnl
         )
 
 
@@ -74,10 +80,11 @@ class Position:
             if not (causes[0] or causes[1]):
                 # Neither SL or TP have been hit, then create a market order for closing the position
                 inverted_side = 'sell' if self.side == 'buy' else 'buy'
-                size = self.size / self.entry_price
 
                 # Close the order manually (weight = 1)
-                order = strategy.trader.create_order(self.symbol, 'MARKET', inverted_side, size)
+                order = strategy.trader.create_order(
+                    self.symbol, 'MARKET', inverted_side, self.size
+                )
             else:
                 # NOTE: this assumes order['status'] == 'FILLED'
                 # Retrieve closing price from SL or TP to log exit price precisely (weight = 1)
@@ -99,12 +106,12 @@ class Position:
             self.pnl[0] = (self.entry_price - self.exit_price) / self.exit_price
 
         # HACK: optimise by doing
-        #       self.pnl[1] = self.size * self.pnl[0]
+        #       self.pnl[1] = self.cost * self.pnl[0]
         #       self.pnl[0] *= 100
         self.pnl[0] *= 100
-        self.pnl[1] = self.size * self.pnl[0] / 100
+        self.pnl[1] = self.cost * self.pnl[0] / 100
 
         # HACK: create a function for calculating P&L + call it inside both if and else
         # Ugly & wet but needed; P&L needs to be calculated after the exit price
         if not strategy.real:
-            self.fee += (self.size + self.pnl[1]) * 0.00036
+            self.fee += (self.cost + self.pnl[1]) * 0.00036

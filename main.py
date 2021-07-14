@@ -86,6 +86,7 @@ def setup_accounts_and_strategies():
         strategies.append(strategy)
 
         logger.info(strategy)
+        logger.info(account)
         logger.info('Running %d strategies' % len(strategies))
 
 
@@ -199,14 +200,13 @@ def open_new_positions(strategy, opened_positions):
         if pair.symbol in opened_positions:
             continue
 
-        size = strategy.determine_position_size(account.allocated, account.available)
-
-        logger.debug('WILL OPEN | Positions: %d;  Free slots: %d' % (
+        cost = strategy.determine_position_cost()
+        logger.info('WILL OPEN | Positions: %d;  Free slots: %d' % (
             len(account.positions), account.free_trading_slots
         ))
-        # len(account.positions) < account.max_trading_slots
+
         # This check is needed in the edge case of `strategy.risk > strategy.stop_loss`
-        if size <= account.available and account.free_trading_slots >= 1:
+        if cost <= account.available and account.free_trading_slots >= 1:
             # By this point there is a price signal due to pair.is_interesting()
             side = pair.determine_position_side(macro_RSI)
 
@@ -221,29 +221,32 @@ def open_new_positions(strategy, opened_positions):
 
             # HACK: improve this error handling logic
             try:
-                position = Position(pair, side, size, strategy)
+                position = Position(pair, side, cost, strategy)
             except ccxt.InsufficientFunds as e:
-                logger.error('[!] Crashed on Binance order opening %s %s with %0.2f: %s' % (
-                    side, pair.symbol, size, e
+                logger.error('[!] InsufficientFunds: crashed opening %s %s with %0.2f: %s' % (
+                    side, pair.symbol, cost, e
                 ))
-                logger.info(size - (size*.1))
+                logger.info(cost - (cost*.1))
                 logger.info(account)
+                # For insufficient margin, try opening the position with smaller cost (-10%).
+                # position = Position(pair, side, cost - (cost*.1), strategy)
+                continue
+            except ccxt.ExchangeError as e:
+                logger.error('[!] ExchangeError: crashed opening %s %s with %0.2f: %s' % (
+                    side, pair.symbol, cost, e
+                ))
                 continue
 
-                # TODO WARNING: SL & TP are not been created here!!
-                # When margin is insufficient, try opening the position with smaller size (-10%).
-                # position = Position(pair, side, size - (size*.1), strategy)
-
-            logger.debug(position)
+            logger.info(position)
             account.log_new_order(position)
 
-            logger.debug('OPENED | Positions: %d;  Free slots: %d' % (
+            logger.info('OPENED | Positions: %d;  Free slots: %d' % (
                 len(account.positions), account.free_trading_slots
             ))
 
             msg += '\n{:>6} {} {} at {} with ${:0.2f}\n' \
                 '{:>4} 🚫 SL: {:0.5f}\t\t 🤝 TP: {:0.5f}\n'.format(
-                emojis[side], pair.symbol, side, position.entry_price, position.size,
+                emojis[side], pair.symbol, side, position.entry_price, position.cost,
                 '', position.stop_loss, position.take_profit,
             )
 

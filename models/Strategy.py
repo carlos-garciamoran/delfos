@@ -84,9 +84,9 @@ class Strategy:
         )
 
 
-    def determine_position_size(self, allocated, available):
+    def determine_position_cost(self):
         """Calculate the position size according to account and strategy parameters."""
-        return (allocated + available) * self.risk / self.stop_loss
+        return (self.account.allocated + self.account.available) * self.risk / self.stop_loss
 
     def should_close(self, position, pair, macro_RSI):
         """Return True if the RSI is overbought in a BUY position or oversold in a SELL position."""
