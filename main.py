@@ -34,19 +34,20 @@ def main():
     while True:
         logger.debug('📡 Aggregating market data...')
 
-        # Catch openssl socket connection errors
+        # Catch openssl socket connection error
         try:
             pairs, macro_RSI, HTTP_error = aggregator.get_market_data(logger, symbols)
         except (KeyError, OSError) as e:
-            logger.error('[!] Crashed on market data request, dumping error...')
+            logger.error('Crashed on market data request, dumping error...')
             logger.error(e)
             continue
 
         if HTTP_error:
-            logger.error('[!] Binance %s returned %d; exiting...' % (HTTP_error[0], HTTP_error[1]))
-            logger.error(HTTP_error[2])
+            logger.critical('HTTP_error %d at %s endpoint; exiting...' % (HTTP_error[0], HTTP_error[1]))
+            logger.critical(HTTP_error[2])
             return
 
+        logger.debug('🎛  Macro-RSI: {:0.2f}'.format(macro_RSI))
         trade(pairs)
 
 
@@ -201,10 +202,6 @@ def open_new_positions(strategy, opened_positions):
             continue
 
         cost = strategy.determine_position_cost()
-        logger.info('WILL OPEN | Positions: %d;  Free slots: %d' % (
-            len(account.positions), account.free_trading_slots
-        ))
-
         # This check is needed in the edge case of `strategy.risk > strategy.stop_loss`
         if cost <= account.available and account.free_trading_slots >= 1:
             # By this point there is a price signal due to pair.is_interesting()
@@ -222,8 +219,9 @@ def open_new_positions(strategy, opened_positions):
             # HACK: improve this error handling logic
             try:
                 position = Position(pair, side, cost, strategy)
+            # TODO: this error is not triggered anymore, could remove it
             except ccxt.InsufficientFunds as e:
-                logger.error('[!] InsufficientFunds: crashed opening %s %s with %0.2f: %s' % (
+                logger.error('InsufficientFunds: crashed opening %s %s with %0.2f: %s' % (
                     side, pair.symbol, cost, e
                 ))
                 logger.info(cost - (cost*.1))
@@ -231,18 +229,15 @@ def open_new_positions(strategy, opened_positions):
                 # For insufficient margin, try opening the position with smaller cost (-10%).
                 # position = Position(pair, side, cost - (cost*.1), strategy)
                 continue
+            # NOTE: catch -4003 error (quantity less than zero)
+            # HACK: instead of catching the error, before opening the order, check
+            #       `tentative_size <= strategy.markets['limits']['amount']['min']` is True
             except ccxt.ExchangeError as e:
-                logger.error('[!] ExchangeError: crashed opening %s %s with %0.2f: %s' % (
-                    side, pair.symbol, cost, e
-                ))
+                logger.error('Caught %s' % e)
                 continue
 
             logger.info(position)
             account.log_new_order(position)
-
-            logger.info('OPENED | Positions: %d;  Free slots: %d' % (
-                len(account.positions), account.free_trading_slots
-            ))
 
             msg += '\n{:>6} {} {} at {} with ${:0.2f}\n' \
                 '{:>4} 🚫 SL: {:0.5f}\t\t 🤝 TP: {:0.5f}\n'.format(
@@ -277,10 +272,10 @@ if __name__ == '__main__':
     # Setup logging. Use `debug()` for writing to STDOUT but NOT to logfile.
     logger.remove()
     logger.add('tracking.log', level="INFO",
-        format="{time:MM-DD HH:mm:ss.SSS} | {message}"
+        format="{time:MM-DD HH:mm:ss.SSS} | {level} | {message}"
     )
-    logger.add(sys.stdout, colorize=True,
-        format="<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{message}</level>"
+    logger.add(sys.stdout, colorize=True, format=
+        "<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{level}</level> | <level>{message}</level>"
     )
 
     logger.info('Logging at: sessions/%s/' % session)
@@ -296,5 +291,5 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         logger.warning('Heard CTRL-C, quitting...')
     except Exception as e:
-        logger.error('[!!] Crashed on unhandled error, dumping exception...')
-        logger.error(e)
+        logger.critical('Crashed on unhandled error, dumping exception...')
+        logger.critical(e)

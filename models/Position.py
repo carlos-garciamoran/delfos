@@ -21,12 +21,17 @@ class Position:
             inverted_side = 'sell' if side == 'buy' else 'buy'
 
             # Create orders with the returned base size
-            self.sl_id = strategy.trader.create_order(
+            sl_order = strategy.trader.create_order(
                 self.symbol, 'STOP_MARKET', inverted_side, self.size, None, {'stopPrice': self.stop_loss}
-            )['id']
-            self.tp_id = strategy.trader.create_order(
+            )
+            self.sl_id = sl_order['id']
+            self.stop_loss = sl_order['stopPrice']
+
+            tp_order = strategy.trader.create_order(
                 self.symbol, 'TAKE_PROFIT_MARKET', inverted_side, self.size, None, {'stopPrice': self.take_profit}
-            )['id']
+            )
+            self.tp_id = tp_order['id']
+            self.take_profit = tp_order['stopPrice']
         else:
             self.opened_at = datetime.now()
             self.entry_price = pair.price

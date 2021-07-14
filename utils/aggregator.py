@@ -13,17 +13,17 @@ def get_market_data(logger, symbols):
 
     # Parse the price for each symbol and request the candlesticks of the latter
     for symbol in symbols:
-        logger.debug('💡 ' + symbol[:-5])
-
         closes, code, error = binance.get_close_candles(symbol.replace('/', ''))
 
         if code != 200:
-            return [], [], ['/kline', code, error]
+            return [], [], [code, '/kline', error]
 
         # Last value of the array is the most recent
         price, RSI = closes[-1], rsi(closes)[-1]
 
-        logger.debug('   📟 Price: ${:<13} 📈 RSI: {:0.2f}'.format(price, RSI))
+        logger.debug('💡 {:<8} -  📟 Price: ${:<12} 📈 RSI: {:0.2f}'.format(
+            symbol[:-5], price, RSI
+        ))
 
         pairs.append(Pair(symbol, price, RSI))
 
