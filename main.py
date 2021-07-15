@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import json
-import os
 import sys
 from datetime import datetime
+from os import chdir
 from pathlib import Path
 from shutil import copyfile
 
@@ -18,7 +18,6 @@ from utils.constants import *
 
 accounts, strategies, symbols = [], [], []
 macro_RSI = 0.0
-real_loaded = False
 
 emojis = {
     True:  '💎', False:  '❌',
@@ -37,9 +36,8 @@ def main():
         # Catch openssl socket connection error
         try:
             pairs, macro_RSI, HTTP_error = aggregator.get_market_data(logger, symbols)
-        except (KeyError, OSError) as e:
-            logger.error('Crashed on market data request, dumping error...')
-            logger.error(e)
+        except OSError as e:
+            logger.error('Crashed on market data request: %s' % e)
             continue
 
         if HTTP_error:
@@ -142,7 +140,6 @@ def close_if_needed(position, pair, strategy):
     """Given a pair, close its position if its SL, TP, or a price signal has been hit."""
     account, price = strategy.account, pair.price
 
-    # NOTE: causes returned for testing purposes
     needs_to_close, causes = strategy.should_close(position, pair, macro_RSI)
 
     if needs_to_close:
@@ -201,7 +198,9 @@ def open_new_positions(strategy, opened_positions):
         if pair.symbol in opened_positions:
             continue
 
+        # HACK: for real accounts, calculate using free balance from Binance
         cost = strategy.determine_position_cost()
+
         # This check is needed in the edge case of `strategy.risk > strategy.stop_loss`
         if cost <= account.available and account.free_trading_slots >= 1:
             # By this point there is a price signal due to pair.is_interesting()
@@ -216,16 +215,17 @@ def open_new_positions(strategy, opened_positions):
                 logger.debug('⛔ Skipping false-flag (SELL in bullish market)')
                 continue
 
-            # HACK: improve this error handling logic
+            # TODO: improve this error handling logic
             try:
                 position = Position(pair, side, cost, strategy)
-            # TODO: this error is not triggered anymore, could remove it
+            # NOTE: cath -2019 error (margin is insufficient)
             except ccxt.InsufficientFunds as e:
-                logger.error('InsufficientFunds: crashed opening %s %s with %0.2f: %s' % (
-                    side, pair.symbol, cost, e
+                logger.error('InsufficientFunds: crashed opening %s %s with $%0.2f' % (
+                    side, pair.symbol, cost
                 ))
-                logger.info(cost - (cost*.1))
                 logger.info(account)
+
+                # HACK: could retrieve free USDT from Binance to open position accordingly
                 # For insufficient margin, try opening the position with smaller cost (-10%).
                 # position = Position(pair, side, cost - (cost*.1), strategy)
                 continue
@@ -234,6 +234,7 @@ def open_new_positions(strategy, opened_positions):
             #       `tentative_size <= strategy.markets['limits']['amount']['min']` is True
             except ccxt.ExchangeError as e:
                 logger.error('Caught %s' % e)
+                logger.error('Tentative price: %0.4f' % (cost / pair.price))
                 continue
 
             logger.info(position)
@@ -263,7 +264,7 @@ if __name__ == '__main__':
     # Create session directory and initialise files.
     Path('sessions/' + session).mkdir(parents=True, exist_ok=True)
     copyfile('strategies.json', 'sessions/{}/strategies.json'.format(session))
-    os.chdir('sessions/' + session)
+    chdir('sessions/' + session)
 
     with open('history.csv', 'w') as fd1, open('macro-trend.csv', 'w') as fd2:
         fd1.write('pair,price,RSI,timestamp\n')
@@ -280,9 +281,8 @@ if __name__ == '__main__':
 
     logger.info('Logging at: sessions/%s/' % session)
 
-    logger.info('EXCHANGE: %s' % EXCHANGE)
     logger.info('INTERVAL: %s' % INTERVAL)
-    
+
     logger.info('MACRO_RSI_MAX: %d' % MACRO_RSI_MAX)
     logger.info('MACRO_RSI_MIN: %d' % MACRO_RSI_MIN)
 
@@ -290,6 +290,6 @@ if __name__ == '__main__':
         main()
     except KeyboardInterrupt:
         logger.warning('Heard CTRL-C, quitting...')
-    except Exception as e:
-        logger.critical('Crashed on unhandled error, dumping exception...')
-        logger.critical(e)
+    # except Exception as e:
+    #     logger.critical('Crashed on unhandled error, dumping exception...')
+    #     logger.critical()

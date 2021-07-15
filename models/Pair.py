@@ -1,4 +1,4 @@
-from utils.constants import *
+from utils.constants import MACRO_RSI_MAX, MACRO_RSI_MIN
 
 
 class Pair:

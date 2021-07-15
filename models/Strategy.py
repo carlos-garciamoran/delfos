@@ -2,7 +2,7 @@ import ccxt
 from dotenv import dotenv_values, load_dotenv
 
 from models.Account import Account
-from utils.constants import *
+from utils.constants import MACRO_RSI_MAX, MACRO_RSI_MIN
 
 
 class Strategy:
@@ -41,10 +41,12 @@ class Strategy:
             self.markets = self.trader.load_markets()
 
             for symbol in list(self.markets):
-                if symbol[-4:] != 'USDT' \
-                    or '/' not in symbol \
-                    or self.markets[symbol]['info']['underlyingType'] != 'COIN':
-                    # Skip non-USDT, quarterlies, and indexes
+                info = self.markets[symbol]['info']
+                if info['quoteAsset'] != 'USDT' or \
+                    info['contractType'] != 'PERPETUAL' or \
+                    info['status'] != 'TRADING' or \
+                    info['underlyingType'] != 'COIN':
+                    # Skip non-USDT, non-perpetual, non-traded, and quarterlies contracts
                     del self.markets[symbol]
                     continue
         else:
@@ -109,12 +111,10 @@ class Strategy:
             if self.profit_close:
                 price_signal = price_signal and pair.price <= position.entry_price
 
-        # NOTE: for testing purposes
         if macro_close:
             with open('macro-close.csv', 'a') as fd:
                 fd.write('%s,%s,%0.2f\n' % (str(position.__dict__), str(pair.__dict__), macro_RSI))
 
-        # NOTE: return causes for testing purposes
         return (
             stop_loss_hit or take_profit_hit or macro_close or price_signal,
             [stop_loss_hit, take_profit_hit, macro_close, price_signal]

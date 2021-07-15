@@ -2,7 +2,7 @@
 
 ## Features
 - Leverages Binance USD-M Futures API 🔌
-- Scans ~10 pairs per second ⏱
+- Scans last 499 candles of 4 pairs in 1 second ⏱
 - Trades multiple strategies with dedicated accounts 💰
 - Opens most interesting positions based on RSI strength 💡
 - Manages risk
@@ -22,8 +22,8 @@
 ## Strategies
 
 **Required default parameters**
-- `account_risk` | risk taken per trade (e.g. 0.01 = 1% of account)
 - `account_size` | initial account size in USDT (e.g. 1000)
+- `risk` | risk taken per trade (e.g. 0.01 = 1% of account)
 - `stop_loss` | distance from entry price (e.g. 0.05 = 5% away)
 - `take_profit` | idem
 - `profit_close` | close position when `current_price >= entry_price` and the RSI has reversed
@@ -31,9 +31,9 @@
 **Attributes**
 - `name` | should be unique
 - `constants` | RSI min and max triggers (e.g. `[30, 70]`, `[20, 80]`)
-- ~`type`~ | type of indicator
 
 **TODO**
+- Higher timeframes
 - Volume
 - RSI divergences
 - Heikin-Ashi candles

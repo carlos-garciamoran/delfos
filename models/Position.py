@@ -110,11 +110,8 @@ class Position:
         else:
             self.pnl[0] = (self.entry_price - self.exit_price) / self.exit_price
 
-        # HACK: optimise by doing
-        #       self.pnl[1] = self.cost * self.pnl[0]
-        #       self.pnl[0] *= 100
-        self.pnl[0] *= 100
-        self.pnl[1] = self.cost * self.pnl[0] / 100
+        self.pnl[1] = self.cost * self.pnl[0]  # P&L in USDT
+        self.pnl[0] *= 100                     # P&L in percentage
 
         # HACK: create a function for calculating P&L + call it inside both if and else
         # Ugly & wet but needed; P&L needs to be calculated after the exit price

@@ -6,7 +6,7 @@ from dotenv import dotenv_values, load_dotenv
 from requests import Session
 from urllib import parse as urllib
 
-from utils.constants import *
+from utils.constants import INTERVAL
 
 
 load_dotenv()
@@ -14,13 +14,9 @@ load_dotenv()
 APIKEY = dotenv_values()["BINANCE_APIKEY"]
 SECRETKEY = dotenv_values()["BINANCE_SECRETKEY"].encode()
 
-if EXCHANGE == 'binanceusdm':
-    URL = 'https://fapi.binance.com'
-    V = URL + '/fapi/v1'
-else:
-    URL = 'https://api.binance.com'
-    V = URL + '/api/v3'
-    SAPI = URL + '/sapi/v1'
+URL = 'https://fapi.binance.com'
+V = URL + '/fapi/v1'
+SAPI = URL + '/fapi/v1'
 
 s = Session()
 s.headers.update({ 'X-MBX-APIKEY': APIKEY })

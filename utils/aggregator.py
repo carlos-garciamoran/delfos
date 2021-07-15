@@ -3,7 +3,6 @@ from datetime import datetime
 from talib import RSI as rsi
 
 from models.Pair import Pair
-from utils.constants import *
 import utils.binance as binance
 
 
@@ -21,11 +20,11 @@ def get_market_data(logger, symbols):
         # Last value of the array is the most recent
         price, RSI = closes[-1], rsi(closes)[-1]
 
+        pairs.append(Pair(symbol, price, RSI))
+
         logger.debug('💡 {:<8} -  📟 Price: ${:<12} 📈 RSI: {:0.2f}'.format(
             symbol[:-5], price, RSI
         ))
-
-        pairs.append(Pair(symbol, price, RSI))
 
     macro_RSI = sum(map(lambda p: p.RSI, pairs)) / len(pairs)
 
