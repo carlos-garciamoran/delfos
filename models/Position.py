@@ -14,8 +14,8 @@ class Position:
 
             self.opened_at = datetime.now()
             self.entry_price = order['price']  # quote currency (USDT)
-            self.cost = order['cost']    # quote currency (USDT)
-            self.size = order['filled']  # base currency (COIN)
+            self.cost = order['cost']    # quote currency
+            self.size = order['filled']  # base currency
 
             self.set_SL_and_TP(strategy)  # NOTE: called here due to dependence on self.entry_price
             inverted_side = 'sell' if side == 'buy' else 'buy'
@@ -41,7 +41,7 @@ class Position:
             self.set_SL_and_TP(strategy)
             self.sl_id, self.tp_id = None, None
 
-        self.fee = self.cost * 0.00036  # opening taker fee in USDT
+        self.fee = self.cost * 0.00036  # opening taker fee (USDT)
         self.exit_price = None
         self.closed_at = None
 

@@ -29,41 +29,18 @@ class Strategy:
             else False
 
         if self.real:
-            load_dotenv()
-
-            self.trader = ccxt.binanceusdm({
-                'apiKey': dotenv_values()["BINANCE_APIKEY"],
-                'secret': dotenv_values()["BINANCE_SECRETKEY"],
-                'enableRateLimit': True
-            })
-
-            initial_size = self.trader.fetch_balance()['USDT']['free']
-            self.markets = self.trader.load_markets()
-
-            for symbol in list(self.markets):
-                info = self.markets[symbol]['info']
-                if info['quoteAsset'] != 'USDT' or \
-                    info['contractType'] != 'PERPETUAL' or \
-                    info['status'] != 'TRADING' or \
-                    info['underlyingType'] != 'COIN':
-                    # Skip non-USDT, non-perpetual, non-traded, and quarterlies contracts
-                    del self.markets[symbol]
-                    continue
+            initial_account_size = self.init_real()
         else:
             self.trader, self.markets = None, None
-            initial_size = strategy['account_size'] \
+            initial_account_size = strategy['account_size'] \
                 if 'account_size' in strategy.keys() \
                 else defaults['account_size']
 
         # Create dedicated trading account and link it to the strategy
-        self.account = Account(self, initial_size)
+        self.account = Account(self, initial_account_size)
 
     def __eq__(self, other):
-        if not isinstance(other, Strategy):
-            # Do not attempt to compare against unrelated types
-            return NotImplemented
-
-        # NOTE: the account should not be compared
+        # NOTE: the account is not compared on purpose
         return self.name == other.name \
             and self.min == other.min \
             and self.max == other.max \
@@ -85,6 +62,45 @@ class Strategy:
         self.profit_close, self.risk
         )
 
+    def init_real(self):
+        load_dotenv()
+
+        self.trader = ccxt.binanceusdm({
+            'apiKey': dotenv_values()["BINANCE_APIKEY"],
+            'secret': dotenv_values()["BINANCE_SECRETKEY"],
+            'enableRateLimit': True
+        })
+
+        self.markets = self.trader.load_markets()
+
+        # Filter undesired symbols
+        for symbol in list(self.markets):
+            info = self.markets[symbol]['info']
+            if info['quoteAsset'] != 'USDT' or \
+                info['contractType'] != 'PERPETUAL' or \
+                info['status'] != 'TRADING' or \
+                info['underlyingType'] != 'COIN':
+                # Skip non-USDT, non-perpetual, non-traded, and quarterlies contracts
+                del self.markets[symbol]
+                continue
+
+        # Fresh start: close all open positions on Binance before starting to trade
+        for position in self.trader.fetchPositions():
+            if position['entryPrice']:
+                symbol = position['symbol']
+                side = 'sell' if position['side'] == 'long' else 'buy'
+                size = abs(float(position['info']['positionAmt']))
+                print('Closing %s %s (%0.4f)...' % (symbol, position['side'], size))
+
+                # Close the existing order
+                self.trader.create_order(symbol, 'MARKET', side, size)
+
+                # Cancel the corresponding SL & TP orders
+                self.trader.fapiPrivate_delete_allopenorders({
+                    'symbol': symbol.replace('/', '')
+                })
+
+        return self.trader.fetch_balance()['USDT']['free']
 
     def determine_position_cost(self):
         """Calculate the position size according to account and strategy parameters."""

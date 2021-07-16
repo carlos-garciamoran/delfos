@@ -220,7 +220,7 @@ def open_new_positions(strategy, opened_positions):
                 position = Position(pair, side, cost, strategy)
             # NOTE: cath -2019 error (margin is insufficient)
             except ccxt.InsufficientFunds as e:
-                logger.error('InsufficientFunds: crashed opening %s %s with $%0.2f' % (
+                logger.error('InsufficientFunds: failed opening %s %s with $%0.2f' % (
                     side, pair.symbol, cost
                 ))
                 logger.info(account)
@@ -234,7 +234,9 @@ def open_new_positions(strategy, opened_positions):
             #       `tentative_size <= strategy.markets['limits']['amount']['min']` is True
             except ccxt.ExchangeError as e:
                 logger.error('Caught %s' % e)
-                logger.error('Tentative price: %0.4f' % (cost / pair.price))
+                logger.error('Failed opening %s %s with $%0.2f (%0.4f)' % (
+                    side, pair.symbol, cost, (cost / pair.price)
+                ))
                 continue
 
             logger.info(position)
