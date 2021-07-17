@@ -31,22 +31,30 @@ def main():
     setup_accounts_and_strategies()
 
     while True:
-        logger.debug('📡 Aggregating market data...')
-
-        # Catch openssl socket connection error
         try:
-            pairs, macro_RSI, HTTP_error = aggregator.get_market_data(logger, symbols)
-        except OSError as e:
-            logger.error('Crashed on market data request: %s' % e)
-            continue
+            logger.debug('📡 Aggregating market data...')
 
-        if HTTP_error:
-            logger.critical('HTTP_error %d at %s endpoint; exiting...' % (HTTP_error[0], HTTP_error[1]))
-            logger.critical(HTTP_error[2])
-            return
+            # Catch openssl socket connection error
+            try:
+                pairs, macro_RSI, HTTP_error = aggregator.get_market_data(logger, symbols)
+            except OSError as e:
+                logger.error('Crashed on market data request: %s' % e)
+                continue
 
-        logger.debug('🎛  Macro-RSI: {:0.2f}'.format(macro_RSI))
-        trade(pairs)
+            if HTTP_error:
+                logger.critical('HTTP_error %d at %s endpoint; exiting...' % (HTTP_error[0], HTTP_error[1]))
+                logger.critical(HTTP_error[2])
+                return
+
+            logger.debug('🎛  Macro-RSI: {:0.2f}'.format(macro_RSI))
+            trade(pairs)
+        except KeyboardInterrupt:
+            logger.warning('Heard CTRL-C!')
+            answer = input('Do you want to quit? Open positions will be left open!! (y/N) ')
+
+            if answer == 'y' or answer == 'Y':
+                logger.info('Exited gracefully')
+                return
 
 
 def setup_accounts_and_strategies():
@@ -138,12 +146,30 @@ def trade(pairs):
 
 def close_if_needed(position, pair, strategy):
     """Given a pair, close its position if its SL, TP, or a price signal has been hit."""
-    account, price = strategy.account, pair.price
+    account = strategy.account
 
     needs_to_close, causes = strategy.should_close(position, pair, macro_RSI)
 
     if needs_to_close:
-        position.close(price, strategy, causes)
+        # NOTE: cath -2019 error (margin is insufficient)
+        try:
+            position.close(pair, strategy, causes, macro_RSI)
+        # TODO: determine what to do with this error
+        except ccxt.InsufficientFunds as e:
+            logger.error('InsufficientFunds: failed closing %s %s with $%0.2f (%s)' % (
+                position.side, pair.symbol, position.cost, e
+            ))
+            logger.info(account)
+
+            return
+        # TODO: determine what to do with this error
+        except ccxt.NetworkError as e:
+            logger.error('NetworkError: failed closing %s %s with $%0.2f' % (
+                position.side, pair.symbol, position.cost
+            ))
+            logger.info(account)
+
+            return
 
         # HACK: for real accounts, could use balance from fetch_balance()
         account.log_closed_order(position)
@@ -217,7 +243,7 @@ def open_new_positions(strategy, opened_positions):
 
             # TODO: improve this error handling logic
             try:
-                position = Position(pair, side, cost, strategy)
+                position = Position(pair, side, cost, strategy, macro_RSI)
             # NOTE: cath -2019 error (margin is insufficient)
             except ccxt.InsufficientFunds as e:
                 logger.error('InsufficientFunds: failed opening %s %s with $%0.2f' % (
@@ -237,6 +263,14 @@ def open_new_positions(strategy, opened_positions):
                 logger.error('Failed opening %s %s with $%0.2f (%0.4f)' % (
                     side, pair.symbol, cost, (cost / pair.price)
                 ))
+                continue
+            # TODO: determine what to do with this error
+            except ccxt.NetworkError as e:
+                logger.error('NetworkError: failed opening %s %s with $%0.2f' % (
+                    position.side, pair.symbol, position.cost
+                ))
+                logger.info(account)
+
                 continue
 
             logger.info(position)
@@ -269,7 +303,7 @@ if __name__ == '__main__':
     chdir('sessions/' + session)
 
     with open('history.csv', 'w') as fd1, open('macro-trend.csv', 'w') as fd2:
-        fd1.write('pair,price,RSI,timestamp\n')
+        fd1.write('symbol,price,RSI,timestamp\n')
         fd2.write('RSI,timestamp\n')
 
     # Setup logging. Use `debug()` for writing to STDOUT but NOT to logfile.
@@ -278,20 +312,12 @@ if __name__ == '__main__':
         format="{time:MM-DD HH:mm:ss.SSS} | {level} | {message}"
     )
     logger.add(sys.stdout, colorize=True, format=
-        "<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{level}</level> | <level>{message}</level>"
+        "<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{message}</level>"
     )
 
     logger.info('Logging at: sessions/%s/' % session)
-
     logger.info('INTERVAL: %s' % INTERVAL)
-
     logger.info('MACRO_RSI_MAX: %d' % MACRO_RSI_MAX)
     logger.info('MACRO_RSI_MIN: %d' % MACRO_RSI_MIN)
 
-    try:
-        main()
-    except KeyboardInterrupt:
-        logger.warning('Heard CTRL-C, quitting...')
-    # except Exception as e:
-    #     logger.critical('Crashed on unhandled error, dumping exception...')
-    #     logger.critical()
+    main()

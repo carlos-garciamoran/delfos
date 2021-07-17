@@ -14,40 +14,17 @@ load_dotenv()
 APIKEY = dotenv_values()["BINANCE_APIKEY"]
 SECRETKEY = dotenv_values()["BINANCE_SECRETKEY"].encode()
 
-URL = 'https://fapi.binance.com'
+URL = 'https://fapi.binance.com/fapi'
 V = URL + '/fapi/v1'
-SAPI = URL + '/fapi/v1'
 
 s = Session()
 s.headers.update({ 'X-MBX-APIKEY': APIKEY })
 
 
-def get_all_coins_info():
-    """Get information of coins (available for deposit and withdraw). Weight: 1."""
-    endpoint = SAPI + '/capital/config/getall'
-
-    params = sign_timestamp()
-    resp = s.get(endpoint, params=params)
-
-    return resp.json(), resp.status_code
-
-
-def get_USDT_capital():
-    """Get the available USDT spot capital. Return -1 if the API didn't return an HTTP 200."""
-    assets, code = get_all_coins_info()
-
-    if code != 200:
-        return -1
-
-    for asset in assets:
-        if asset['coin'] == 'USDT':
-            return float(asset['free'])
-
-
 # NOTE: unused; TODO: parse used JSON objects
 def get_account_info():
-    """Get current account information. Weight: 10"""
-    endpoint = V + '/account'
+    """Get current account information, including positions. Weight: 5"""
+    endpoint = URL + '/v2/account'
 
     params = sign_timestamp()
     resp = s.get(endpoint, params=params)
@@ -66,7 +43,7 @@ def get_close_candles(symbol):
     > 1000      10
     """
     closes = np.array([])
-    endpoint = V + '/klines'
+    endpoint = URL + '/v1/klines'
 
     # Get the last 499 candles to calculate a precise RSI & stay in weight 2
     resp = s.get(endpoint, params={

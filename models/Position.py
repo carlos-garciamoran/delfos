@@ -2,9 +2,11 @@ from datetime import datetime
 
 
 class Position:
-    def __init__(self, pair, side, cost, strategy):
+    def __init__(self, pair, side, cost, strategy, macro_RSI):
         self.symbol = pair.symbol  # symbol name
         self.side = side           # 'buy', 'sell'
+        self.entry_RSI = pair.RSI     # for post-analysis purposes
+        self.entry_macro = macro_RSI  # for post-analysis purposes
 
         if strategy.real:
             tentative_size = cost / pair.price  # base currency (COIN)
@@ -41,6 +43,9 @@ class Position:
             self.set_SL_and_TP(strategy)
             self.sl_id, self.tp_id = None, None
 
+        self.exit_RSI = None
+        self.exit_macro = None
+
         self.fee = self.cost * 0.00036  # opening taker fee (USDT)
         self.exit_price = None
         self.closed_at = None
@@ -73,8 +78,12 @@ class Position:
             self.stop_loss = self.entry_price + (self.entry_price * strategy.stop_loss)
             self.take_profit = self.entry_price - (self.entry_price * strategy.take_profit)
 
-    def close(self, exit_price, strategy, causes):
+    def close(self, pair, strategy, causes, macro_RSI):
         """Mark the position as closed at the given exit_price and calculate P&L and fees."""
+        exit_price = pair.price
+        self.exit_RSI = pair.RSI
+        self.exit_macro = macro_RSI
+
         if strategy.real:
             # Close all symbol orders (i.e. TP & SL) with a single call (weight = 1)
             strategy.trader.fapiPrivate_delete_allopenorders({
