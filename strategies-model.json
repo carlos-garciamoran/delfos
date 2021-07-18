@@ -3,28 +3,25 @@
         "account_size": 1000.0,
 
         "risk": 0.01,
-        "stop_loss": 0.04,
-        "take_profit": 0.03,
+        "stop_loss": 0.03,
+        "take_profit": 0.02,
         "profit_close": false
     },
 
     "strategies": [
         {
-            "name": "30_70_SL_4",
             "constants": [30, 70],
             "take_profit": 0.01,
             "REAL": true
         },
         {
-            "name": "30_70_SL_5_profit",
             "constants": [30, 70],
             "profit_close": true
         },
         {
-            "name": "40_60_SL_10_TP_2",
             "constants": [40, 60],
-            "stop_loss": 0.10,
-            "take_profit": 0.02
+            "stop_loss": 0.028,
+            "take_profit": 0.015
         }
     ]
 }

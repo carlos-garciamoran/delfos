@@ -6,14 +6,13 @@ class Pair:
         self.symbol = symbol
         self.price = price
         self.RSI = RSI
-
         self.strength = 0.0   # strength of the RSI
 
     def __str__(self):
-        return '''{}
-    price    = {}
-    RSI      = {}
-    strength = {}\n'''.format(self.symbol, self.price, self.RSI, self.strength)
+        return self.symbol + '\n' \
+                f'\tprice    = {self.price}\n' \
+                f'\tRSI      = {self.RSI}\n' \
+                f'\tstrength = {self.strength}\n'
 
 
     def is_interesting(self, strategy):

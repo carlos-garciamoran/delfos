@@ -1,5 +1,6 @@
 import ccxt
 from dotenv import dotenv_values, load_dotenv
+from loguru import logger
 
 from models.Account import Account
 from utils.constants import MACRO_RSI_MAX, MACRO_RSI_MIN
@@ -8,7 +9,6 @@ from utils.constants import MACRO_RSI_MAX, MACRO_RSI_MIN
 class Strategy:
     def __init__(self, defaults, strategy):
         # Required attributes
-        self.name = strategy['name']
         self.min, self.max = strategy['constants'][0], strategy['constants'][1]
 
         # Optional attributes (defaults)
@@ -28,7 +28,11 @@ class Strategy:
             if 'REAL' in strategy.keys() \
             else False
 
+        self.name = f'{self.min}-{self.max}_SL-{(self.stop_loss*100):g}_TP-{(self.take_profit*100):g}'
+        self.name += '_profit' if self.profit_close else ''
+
         if self.real:
+            self.name += '_REAL'
             initial_account_size = self.init_real()
         else:
             self.trader, self.markets = None, None
@@ -40,7 +44,7 @@ class Strategy:
         self.account = Account(self, initial_account_size)
 
     def __eq__(self, other):
-        # NOTE: the account is not compared on purpose
+        # NOTE: `self.account` is not compared on purpose
         return self.name == other.name \
             and self.min == other.min \
             and self.max == other.max \
@@ -51,23 +55,20 @@ class Strategy:
             and self.real == other.real
 
     def __str__(self):
-        return '''{}
-    real         = {}
-    min, max     = {}, {}
-    stop_loss    = {}
-    take_profit  = {}
-    profit_close = {}
-    risk         = {}\n'''.format(self.name,
-        self.real, self.min, self.max, self.stop_loss, self.take_profit,
-        self.profit_close, self.risk
-        )
+        return self.name + '\n' \
+                f'\treal         = {self.real}\n' \
+                f'\tmin, max     = {self.min}, {self.max}\n' \
+                f'\tstop_loss    = {self.stop_loss}\n' \
+                f'\ttake_profit  = {self.take_profit}\n' \
+                f'\tprofit_close = {self.profit_close}\n' \
+                f'\trisk         = {self.risk}\n'
 
     def init_real(self):
         load_dotenv()
 
         self.trader = ccxt.binanceusdm({
-            'apiKey': dotenv_values()["BINANCE_APIKEY"],
-            'secret': dotenv_values()["BINANCE_SECRETKEY"],
+            'apiKey': dotenv_values()['BINANCE_APIKEY'],
+            'secret': dotenv_values()['BINANCE_SECRETKEY'],
             'enableRateLimit': True
         })
 
@@ -87,13 +88,14 @@ class Strategy:
         # Fresh start: close all open positions on Binance before starting to trade
         for position in self.trader.fetchPositions():
             if position['entryPrice']:
-                symbol = position['symbol']
-                side = 'sell' if position['side'] == 'long' else 'buy'
+                symbol, side = position['symbol'], position['side']
+                inverted_side = 'sell' if side == 'long' else 'buy'
                 size = abs(float(position['info']['positionAmt']))
-                print('Closing %s %s (%0.4f)...' % (symbol, position['side'], size))
+
+                logger.info(f"Closing {symbol} {side} ({size:g})...")
 
                 # Close the existing order
-                self.trader.create_order(symbol, 'MARKET', side, size)
+                self.trader.create_order(symbol, 'MARKET', inverted_side, size)
 
                 # Cancel the corresponding SL & TP orders
                 self.trader.fapiPrivate_delete_allopenorders({
@@ -129,7 +131,9 @@ class Strategy:
 
         if macro_close:
             with open('macro-close.csv', 'a') as fd:
-                fd.write('%s,%s,%0.2f\n' % (str(position.__dict__), str(pair.__dict__), macro_RSI))
+                fd.write(
+                    f'{str(position.__dict__)},{str(pair.__dict__)},{macro_RSI:.2f}\n'
+                )
 
         return (
             stop_loss_hit or take_profit_hit or macro_close or price_signal,

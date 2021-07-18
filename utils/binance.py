@@ -11,11 +11,10 @@ from utils.constants import INTERVAL
 
 load_dotenv()
 
-APIKEY = dotenv_values()["BINANCE_APIKEY"]
-SECRETKEY = dotenv_values()["BINANCE_SECRETKEY"].encode()
+APIKEY = dotenv_values()['BINANCE_APIKEY']
+SECRETKEY = dotenv_values()['BINANCE_SECRETKEY'].encode()
 
-URL = 'https://fapi.binance.com/fapi'
-V = URL + '/fapi/v1'
+BASEURL = 'https://fapi.binance.com/fapi'
 
 s = Session()
 s.headers.update({ 'X-MBX-APIKEY': APIKEY })
@@ -24,15 +23,14 @@ s.headers.update({ 'X-MBX-APIKEY': APIKEY })
 # NOTE: unused; TODO: parse used JSON objects
 def get_account_info():
     """Get current account information, including positions. Weight: 5"""
-    endpoint = URL + '/v2/account'
+    endpoint = BASEURL + '/v2/account'
 
-    params = sign_timestamp()
-    resp = s.get(endpoint, params=params)
+    resp = s.get(endpoint, params=sign_timestamp())
 
     return resp.json(), resp.status_code
 
 
-def get_close_candles(symbol):
+def get_close_candles(symbol, limit=499):
     """
     Get the last 499 kline/candlestick close values for a symbol.
 
@@ -43,11 +41,11 @@ def get_close_candles(symbol):
     > 1000      10
     """
     closes = np.array([])
-    endpoint = URL + '/v1/klines'
+    endpoint = BASEURL + '/v1/klines'
 
     # Get the last 499 candles to calculate a precise RSI & stay in weight 2
     resp = s.get(endpoint, params={
-        'symbol': symbol, 'interval': INTERVAL, 'limit': 499
+        'symbol': symbol, 'interval': INTERVAL, 'limit': limit
     })
 
     # Basic error checking

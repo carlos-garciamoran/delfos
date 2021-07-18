@@ -2,7 +2,7 @@
 import json
 import sys
 from datetime import datetime
-from os import chdir
+from os import chdir, listdir
 from pathlib import Path
 from shutil import copyfile
 
@@ -36,21 +36,22 @@ def main():
 
             # Catch openssl socket connection error
             try:
-                pairs, macro_RSI, HTTP_error = aggregator.get_market_data(logger, symbols)
+                pairs, macro_RSI, HTTP_error = aggregator.get_market_data(symbols)
             except OSError as e:
-                logger.error('Crashed on market data request: %s' % e)
+                logger.error('Crashed on market data request: ' + e)
                 continue
 
             if HTTP_error:
-                logger.critical('HTTP_error %d at %s endpoint; exiting...' % (HTTP_error[0], HTTP_error[1]))
-                logger.critical(HTTP_error[2])
+                logger.critical(f'HTTP error {HTTP_error[0]} at /v1/klines endpoint; dumping and exiting...')
+                logger.critical(HTTP_error[1])
                 return
 
-            logger.debug('🎛  Macro-RSI: {:0.2f}'.format(macro_RSI))
+            logger.debug(f'🎛  Macro-RSI: {macro_RSI:.2f}')
             trade(pairs)
         except KeyboardInterrupt:
             logger.warning('Heard CTRL-C!')
-            answer = input('Do you want to quit? Open positions will be left open!! (y/N) ')
+            logger.warning('Do you want to quit? Open positions will be left open! (y/N) ', end='')
+            answer = input()
 
             if answer == 'y' or answer == 'Y':
                 logger.info('Exited gracefully')
@@ -74,8 +75,8 @@ def setup_accounts_and_strategies():
             if strategy.real:
                 symbols = list(strategy.markets)
         except KeyError as e:
-            logger.error('[!] Error parsing %s' % strategy_data['name'])
-            logger.error('[!] Need to add strategy parameter %s, skipping...' % e)
+            logger.error('Error parsing strategy')
+            logger.error(f'Need to add strategy parameter {e}, skipping...')
             continue
 
         name = strategy.name
@@ -83,8 +84,8 @@ def setup_accounts_and_strategies():
         Path(name).mkdir(exist_ok=True)  # Each strategy gets its own directory
 
         # Create JSON files for tracking positions
-        with open('%s/closed.json' % name, 'w') as fd1, \
-            open('%s/opened.json' % name, 'w') as fd2:
+        with open(name + '/closed.json', 'w') as fd1, \
+            open(name + '/opened.json', 'w') as fd2:
             fd1.write('[]\n')
             fd2.write('[]\n')
 
@@ -94,7 +95,8 @@ def setup_accounts_and_strategies():
 
         logger.info(strategy)
         logger.info(account)
-        logger.info('Running %d strategies' % len(strategies))
+
+    logger.info(f'Running {len(strategies)} strategies')
 
 
 def trade(pairs):
@@ -108,32 +110,34 @@ def trade(pairs):
         for position in account.positions:
             opened_positions[position.symbol] = position
 
-        logger.debug('🔍 Closing positions for %s...' % strategy.name)
+        logger.debug(f'🔍 Closing positions for {strategy.name}...')
+
         # First, close all necessary positions for the given strategy
         for pair in pairs:
             if pair.symbol in opened_positions:
                 position = opened_positions[pair.symbol]
 
-                # HACK: could move function to a Position method
+                # HACK: move function to a Position method(?)
                 close_if_needed(position, pair, strategy)
 
                 # Log the pair of the open position if it has not been logged.
                 if pair.symbol not in logged_pairs:
-                    # IDEA: move call after strategies loop is over
-                    with open('history.csv', 'a') as fd:
-                        fd.write('%s,%f,%f,%s\n' % (pair.symbol, pair.price, pair.RSI, datetime.now()))
+                    # HACK: move call after strategies loop is over
+                    with open('price-history.csv', 'a') as fd:
+                        fd.write(f'{pair.symbol},{pair.price},{pair.RSI},{datetime.now()}\n')
 
                     logged_pairs.append(pair.symbol)
 
             # Store pairs hitting price signal
             if pair.is_interesting(strategy):
+                # HACK: move strength calculation here >>> save useless function call!
                 pair.compute_strength()
                 account.potential.append(pair)
 
         # Then, sort potential positions so most extreme RSIs get priority (i.e. positions are opened first)
         account.potential.sort(key=lambda p: p.strength, reverse=True)
 
-        logger.debug('🔎 Trying to open %d potential positions...' % len(account.potential))
+        logger.debug(f'🔎 Trying to open {len(account.potential)} positions...')
 
         # Finally, open the interesting positions
         open_new_positions(strategy, opened_positions)
@@ -156,17 +160,17 @@ def close_if_needed(position, pair, strategy):
             position.close(pair, strategy, causes, macro_RSI)
         # TODO: determine what to do with this error
         except ccxt.InsufficientFunds as e:
-            logger.error('InsufficientFunds: failed closing %s %s with $%0.2f (%s)' % (
-                position.side, pair.symbol, position.cost, e
-            ))
+            logger.error('InsufficientFunds: failed closing ' \
+                f'{position.side} {pair.symbol} with ${position.cost:.4f} ({e})'
+            )
             logger.info(account)
 
             return
         # TODO: determine what to do with this error
         except ccxt.NetworkError as e:
-            logger.error('NetworkError: failed closing %s %s with $%0.2f' % (
-                position.side, pair.symbol, position.cost
-            ))
+            logger.error('NetworkError: failed closing ' \
+                f'{position.side} {pair.symbol} with ${position.cost:.4f} ({e})'
+            )
             logger.info(account)
 
             return
@@ -175,24 +179,21 @@ def close_if_needed(position, pair, strategy):
         account.log_closed_order(position)
 
         # Optimization happening here, baby ;)
-        msg = '\n{:>4} 🔮 Strategy: {}\n' \
-            '{:>6} Closed {} {} at {}\n' \
-            '{:>4} 💸 P&L: {:0.2f}%, ${:0.2f}\n' \
-            '{:>4} 🧨 Fee = ${:0.2f}\n'.format(
-                '', strategy.name,
-                emojis[position.pnl[0] >= 0], position.symbol, position.side, position.exit_price,
-                '', position.pnl[0], position.pnl[1],
-                '', position.fee
-            )
+        msg = '\n' \
+            f'     🔮 Strategy: {strategy.name}\n' \
+            f'     {emojis[position.net_pnl >= 0]} Closed {position.symbol} {position.side} at {position.exit_price}\n' \
+            f'     💸 P&L: {position.pnl:.2f}%, ${position.net_pnl:.4f}\n' \
+            f'     🧨 Fee: ${position.fee:.4f}\n' \
+            '     '
 
         if causes[0]:
-            msg += '{:>5}⛔️ SL hit\n'.format('')
+            msg += '⛔️ SL hit\n'
         elif causes[1]:
-            msg += '{:>5}🤝 TP hit\n'.format('')
+            msg += '🤝 TP hit\n'
         elif causes[2]:
-            msg += '{:>5}🎛  Macro signal\n'.format('')
+            msg += '🎛  Macro signal\n'
         elif causes[3]:
-            msg += '{:>5}📞 Price signal hit\n'.format('')
+            msg += '📞 Price signal hit\n'
 
         logger.warning(msg)
 
@@ -200,15 +201,12 @@ def close_if_needed(position, pair, strategy):
         percentage = (
             account.available + account.allocated - account.INITIAL_SIZE
             ) / account.INITIAL_SIZE * 100
+        total = account.available + account.allocated - account.fees
 
-        logger.info(
-            '\n{:>4} 💸 Total realized P&L: {:0.2f}%, ${:0.2f}\n'
-            '{:>4} 🤑 Wins: {}\t\t 🤔 Loses: {}\n'
-            '{:>4} 💰 Total account: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}\n'.format(
-                '', percentage, account.pnl,
-                '', account.wins, account.loses,
-                '', account.available + account.allocated - account.fees, account.allocated
-            )
+        logger.info('\n'
+            f'     💸 Total realized P&L: {percentage:.2f}%, ${account.pnl:.4f}\n'
+            f'     🤑 Wins: {account.wins}\t\t 🤔 Loses: {account.loses}\n'
+            f'     💰 Total account: ${total:.4f}\t 💵 Allocated capital: ${account.allocated:.4f}\n'
         )
 
         account.log_positions_to_json(position)
@@ -217,7 +215,7 @@ def close_if_needed(position, pair, strategy):
 def open_new_positions(strategy, opened_positions):
     """Open positions based on RSI strength. Ensure no more than 1 position per symbol is opened."""
     account = strategy.account
-    msg = '🔮 Opened positions for %s:' % strategy.name
+    msg = '🔮 Opened positions for ' + strategy.name
 
     for pair in account.potential:
         # Do not open a new position if there's an existing position with the same symbol
@@ -246,9 +244,9 @@ def open_new_positions(strategy, opened_positions):
                 position = Position(pair, side, cost, strategy, macro_RSI)
             # NOTE: cath -2019 error (margin is insufficient)
             except ccxt.InsufficientFunds as e:
-                logger.error('InsufficientFunds: failed opening %s %s with $%0.2f' % (
-                    side, pair.symbol, cost
-                ))
+                logger.error(
+                    f'InsufficientFunds: failed opening {side} {pair.symbol} with ${cost:.4f}'
+                )
                 logger.info(account)
 
                 # HACK: could retrieve free USDT from Binance to open position accordingly
@@ -259,16 +257,17 @@ def open_new_positions(strategy, opened_positions):
             # HACK: instead of catching the error, before opening the order, check
             #       `tentative_size <= strategy.markets['limits']['amount']['min']` is True
             except ccxt.ExchangeError as e:
-                logger.error('Caught %s' % e)
-                logger.error('Failed opening %s %s with $%0.2f (%0.4f)' % (
-                    side, pair.symbol, cost, (cost / pair.price)
-                ))
+                logger.error('Caught ' + e)
+                logger.error(
+                    f'Failed opening {side} {pair.symbol} with ${cost:.4f} ({cost / pair.price})'
+                )
+
                 continue
             # TODO: determine what to do with this error
             except ccxt.NetworkError as e:
-                logger.error('NetworkError: failed opening %s %s with $%0.2f' % (
-                    position.side, pair.symbol, position.cost
-                ))
+                logger.error(
+                    f'NetworkError: failed opening {side} {pair.symbol} with ${cost:.4f} ({e})'
+                )
                 logger.info(account)
 
                 continue
@@ -276,17 +275,15 @@ def open_new_positions(strategy, opened_positions):
             logger.info(position)
             account.log_new_order(position)
 
-            msg += '\n{:>6} {} {} at {} with ${:0.2f}\n' \
-                '{:>4} 🚫 SL: {:0.5f}\t\t 🤝 TP: {:0.5f}\n'.format(
-                emojis[side], pair.symbol, side, position.entry_price, position.cost,
-                '', position.stop_loss, position.take_profit,
-            )
+            msg += '\n' \
+                f'{emojis[side]:>6} {pair.symbol} {side} at {position.entry_price} with ${position.cost:.4f}\n' \
+                f'{"":>4} 🚫 SL: {position.stop_loss:.4f}\t\t 🤝 TP: {position.take_profit:.4f}\n'
 
     # Only log when msg has been appended some content
     if len(msg) > 55:
-        msg += '\n{:>4} 💰 Available capital: ${:0.2f}\t 💵 Allocated capital: ${:0.2f}\n'.format(
-            '', account.available, account.allocated
-        )
+        msg += '\n' + \
+            f'     💰 Available capital: ${account.available:.4f}\n' \
+            f'     💵 Allocated capital: ${account.allocated:.4f}\n'
         logger.warning(msg)
 
 
@@ -295,29 +292,42 @@ if __name__ == '__main__':
         print('[!] Need to provide a session name as argv, exiting...')
         sys.exit(1)
 
-    session = sys.argv[1]
+    last_index = -1
+    _id = sys.argv[1]
+    prefix = f'{_id}_{datetime.now():%Y-%m-%d}'
+
+    for session in listdir('sessions/'):
+        if session.startswith(prefix):
+            # Existing day-session found: get the last index and increment
+            last_dash = session.find('_', len(_id) + 1)
+            index = int(session[last_dash+1:])
+            if index > last_index:
+                last_index = index
+
+    session = f'{prefix}_{last_index+1}'
+    full_path = 'sessions/' + session
 
     # Create session directory and initialise files.
-    Path('sessions/' + session).mkdir(parents=True, exist_ok=True)
-    copyfile('strategies.json', 'sessions/{}/strategies.json'.format(session))
-    chdir('sessions/' + session)
+    Path(full_path).mkdir(parents=True, exist_ok=True)
+    copyfile('strategies.json', full_path + '/strategies.json')
+    chdir(full_path)
 
-    with open('history.csv', 'w') as fd1, open('macro-trend.csv', 'w') as fd2:
+    with open('price-history.csv', 'w') as fd1, open('macro-trend.csv', 'w') as fd2:
         fd1.write('symbol,price,RSI,timestamp\n')
         fd2.write('RSI,timestamp\n')
 
     # Setup logging. Use `debug()` for writing to STDOUT but NOT to logfile.
     logger.remove()
-    logger.add('tracking.log', level="INFO",
-        format="{time:MM-DD HH:mm:ss.SSS} | {level} | {message}"
+    logger.add('tracking.log', level='INFO',
+        format='{time:MM-DD HH:mm:ss.SSS} | {level} | {message}'
     )
     logger.add(sys.stdout, colorize=True, format=
-        "<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{message}</level>"
+        '<green>{time:MM-DD HH:mm:ss.SSS}</green> | <level>{message}</level>'
     )
 
-    logger.info('Logging at: sessions/%s/' % session)
-    logger.info('INTERVAL: %s' % INTERVAL)
-    logger.info('MACRO_RSI_MAX: %d' % MACRO_RSI_MAX)
-    logger.info('MACRO_RSI_MIN: %d' % MACRO_RSI_MIN)
+    logger.info('Logging at: ' + full_path)
+    logger.info(f'INTERVAL: {INTERVAL}')
+    logger.info(f'MACRO_RSI_MAX: {MACRO_RSI_MAX}')
+    logger.info(f'MACRO_RSI_MIN: {MACRO_RSI_MIN}')
 
     main()
