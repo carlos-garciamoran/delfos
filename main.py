@@ -15,7 +15,6 @@ from models.Strategy import Strategy
 import utils.aggregator as aggregator
 from utils.constants import *
 
-
 accounts, strategies, symbols = [], [], []
 macro_RSI = 0.0
 
@@ -60,43 +59,109 @@ def main():
 
 def setup_accounts_and_strategies():
     """Parse JSON strategies and set up an account and directory for new ones."""
-    global symbols
+    real = None
 
     with open('strategies.json') as fd:
         data = json.loads(fd.read())
 
     for strategy_data in data['strategies']:
-        # HACK: fix this fucked up logic
-        # Only try to create a real strategy if it has not been created before.
         try:
             strategy = Strategy(data['defaults'], strategy_data)
             account = strategy.account
 
             if strategy.real:
-                symbols = list(strategy.markets)
+                real = strategy
         except KeyError as e:
-            logger.error('Error parsing strategy')
-            logger.error(f'Need to add strategy parameter {e}, skipping...')
+            logger.error(f'Required strategy parameter {e} missing, skipping...')
             continue
 
         name = strategy.name
 
-        Path(name).mkdir(exist_ok=True)  # Each strategy gets its own directory
-
-        # Create JSON files for tracking positions
-        with open(name + '/closed.json', 'w') as fd1, \
-            open(name + '/opened.json', 'w') as fd2:
+        # Create files for position tracking
+        with open(name + '__closed.json', 'w') as fd1, \
+            open(name + '__opened.json', 'w') as fd2:
             fd1.write('[]\n')
             fd2.write('[]\n')
 
-        # NOTE: `available` is not set by strategy, it only uses the default
         accounts.append(account)
         strategies.append(strategy)
 
-        logger.info(strategy)
-        logger.info(account)
+        if not strategy.real:
+            logger.info(strategy)
+            logger.info(account)
+
+    trader = init_trader(real)
+
+    if real:
+        real.trader = trader
+        logger.info(real)
+        logger.info(real.account)
 
     logger.info(f'Running {len(strategies)} strategies')
+
+
+def init_trader(real):
+    global symbols
+
+    trader = ccxt.binanceusdm({
+        'apiKey': BINANCE_APIKEY,
+        'secret': BINANCE_SECRETKEY,
+        'enableRateLimit': True
+    })
+    markets = trader.load_markets()
+
+    for symbol in list(markets):
+        info = markets[symbol]['info']
+        if info['quoteAsset'] != 'USDT' or \
+            info['contractType'] != 'PERPETUAL' or \
+            info['status'] != 'TRADING' or \
+            info['underlyingType'] != 'COIN':
+            # Skip non-USDT, non-perpetual, non-traded, and quarterlies contracts
+            del markets[symbol]
+            continue
+
+    symbols = list(markets)
+
+    logger.info(f'Loaded {len(symbols)} symbols')
+
+    if real:
+        logger.debug('Found real account; setting up...')
+
+        real.account.available = trader.fetch_balance()['USDT']['free']
+
+        logger.debug('Adjusting margins and leverage...')
+        for symbol in list(markets):
+            logger.debug(symbol[:-5])
+            alt_symbol = symbol.replace('/', '')
+
+            trader.fapiPrivate_post_leverage({'symbol': alt_symbol, 'leverage': 1})
+
+            try:
+                trader.fapiPrivate_post_margintype({
+                    'symbol': alt_symbol, 'marginType': 'ISOLATED'
+                })
+            except ccxt.ExchangeError as e:
+                logger.debug(e)
+                continue
+            else:
+                logger.info(f'Margin adjusted for {symbol}')
+
+        logger.debug('Fetching and closing opened positions before launching...')
+        for position in trader.fetchPositions():
+            if position['entryPrice']:
+                symbol, side = position['symbol'], position['side']
+                inverted_side = 'sell' if side == 'long' else 'buy'
+                size = abs(float(position['info']['positionAmt']))
+
+                logger.info(f'Closing {symbol} {side} ({size:g})...')
+
+                # Close the existing order
+                trader.create_order(symbol, 'MARKET', inverted_side, size)
+
+                # Cancel the corresponding SL & TP orders
+                trader.fapiPrivate_delete_allopenorders({'symbol': alt_symbol})
+        
+        return trader
 
 
 def trade(pairs):
@@ -130,8 +195,8 @@ def trade(pairs):
 
             # Store pairs hitting price signal
             if pair.is_interesting(strategy):
-                # HACK: move strength calculation here >>> save useless function call!
-                pair.compute_strength()
+                # NOTE: strength calculated here to save useless function call
+                pair.strength = abs(50 - pair.RSI)
                 account.potential.append(pair)
 
         # Then, sort potential positions so most extreme RSIs get priority (i.e. positions are opened first)
@@ -194,6 +259,8 @@ def close_if_needed(position, pair, strategy):
             msg += '🎛  Macro signal\n'
         elif causes[3]:
             msg += '📞 Price signal hit\n'
+        elif causes[4]:
+            msg += '⏱ Timer hit\n'
 
         logger.warning(msg)
 
@@ -201,7 +268,9 @@ def close_if_needed(position, pair, strategy):
         percentage = (
             account.available + account.allocated - account.INITIAL_SIZE
             ) / account.INITIAL_SIZE * 100
-        total = account.available + account.allocated - account.fees
+
+        # No need to substract fees since P&L factored is already net
+        total = account.available + account.allocated
 
         logger.info('\n'
             f'     💸 Total realized P&L: {percentage:.2f}%, ${account.pnl:.4f}\n'
@@ -223,7 +292,7 @@ def open_new_positions(strategy, opened_positions):
             continue
 
         # HACK: for real accounts, calculate using free balance from Binance
-        cost = strategy.determine_position_cost()
+        cost = strategy.determine_position_cost() / 10  # divide by 10 for testing purposes
 
         # This check is needed in the edge case of `strategy.risk > strategy.stop_loss`
         if cost <= account.available and account.free_trading_slots >= 1:
@@ -316,7 +385,7 @@ if __name__ == '__main__':
         fd1.write('symbol,price,RSI,timestamp\n')
         fd2.write('RSI,timestamp\n')
 
-    # Setup logging. Use `debug()` for writing to STDOUT but NOT to logfile.
+    # Use `debug()` for writing to STDOUT but NOT to logfile.
     logger.remove()
     logger.add('tracking.log', level='INFO',
         format='{time:MM-DD HH:mm:ss.SSS} | {level} | {message}'
@@ -329,5 +398,6 @@ if __name__ == '__main__':
     logger.info(f'INTERVAL: {INTERVAL}')
     logger.info(f'MACRO_RSI_MAX: {MACRO_RSI_MAX}')
     logger.info(f'MACRO_RSI_MIN: {MACRO_RSI_MIN}')
+    logger.info(f'TIMER_TRIGGER: {TIMER_TRIGGER}')
 
     main()

@@ -1,17 +1,13 @@
-import ccxt
-from dotenv import dotenv_values, load_dotenv
-from loguru import logger
+from datetime import datetime
 
 from models.Account import Account
-from utils.constants import MACRO_RSI_MAX, MACRO_RSI_MIN
+from utils.constants import MACRO_RSI_MAX, MACRO_RSI_MIN, TIMER_TRIGGER
 
 
 class Strategy:
     def __init__(self, defaults, strategy):
-        # Required attributes
         self.min, self.max = strategy['constants'][0], strategy['constants'][1]
 
-        # Optional attributes (defaults)
         self.profit_close = strategy['profit_close'] \
             if 'profit_close' in strategy.keys() \
             else False
@@ -27,18 +23,17 @@ class Strategy:
         self.real = strategy['REAL'] \
             if 'REAL' in strategy.keys() \
             else False
+        initial_account_size = strategy['account_size'] \
+            if 'account_size' in strategy.keys() \
+            else defaults['account_size']
 
         self.name = f'{self.min}-{self.max}_SL-{(self.stop_loss*100):g}_TP-{(self.take_profit*100):g}'
         self.name += '_profit' if self.profit_close else ''
 
         if self.real:
             self.name += '_REAL'
-            initial_account_size = self.init_real()
         else:
-            self.trader, self.markets = None, None
-            initial_account_size = strategy['account_size'] \
-                if 'account_size' in strategy.keys() \
-                else defaults['account_size']
+            self.trader = None
 
         # Create dedicated trading account and link it to the strategy
         self.account = Account(self, initial_account_size)
@@ -62,47 +57,6 @@ class Strategy:
                 f'\ttake_profit  = {self.take_profit}\n' \
                 f'\tprofit_close = {self.profit_close}\n' \
                 f'\trisk         = {self.risk}\n'
-
-    def init_real(self):
-        load_dotenv()
-
-        self.trader = ccxt.binanceusdm({
-            'apiKey': dotenv_values()['BINANCE_APIKEY'],
-            'secret': dotenv_values()['BINANCE_SECRETKEY'],
-            'enableRateLimit': True
-        })
-
-        self.markets = self.trader.load_markets()
-
-        # Filter undesired symbols
-        for symbol in list(self.markets):
-            info = self.markets[symbol]['info']
-            if info['quoteAsset'] != 'USDT' or \
-                info['contractType'] != 'PERPETUAL' or \
-                info['status'] != 'TRADING' or \
-                info['underlyingType'] != 'COIN':
-                # Skip non-USDT, non-perpetual, non-traded, and quarterlies contracts
-                del self.markets[symbol]
-                continue
-
-        # Fresh start: close all open positions on Binance before starting to trade
-        for position in self.trader.fetchPositions():
-            if position['entryPrice']:
-                symbol, side = position['symbol'], position['side']
-                inverted_side = 'sell' if side == 'long' else 'buy'
-                size = abs(float(position['info']['positionAmt']))
-
-                logger.info(f"Closing {symbol} {side} ({size:g})...")
-
-                # Close the existing order
-                self.trader.create_order(symbol, 'MARKET', inverted_side, size)
-
-                # Cancel the corresponding SL & TP orders
-                self.trader.fapiPrivate_delete_allopenorders({
-                    'symbol': symbol.replace('/', '')
-                })
-
-        return self.trader.fetch_balance()['USDT']['free']
 
     def determine_position_cost(self):
         """Calculate the position size according to account and strategy parameters."""
@@ -129,6 +83,11 @@ class Strategy:
             if self.profit_close:
                 price_signal = price_signal and pair.price <= position.entry_price
 
+        # Calculate the position's length in minutes
+        position_duration = (datetime.now() - position.opened_at).seconds / 60
+
+        timer_hit = True if position_duration >= TIMER_TRIGGER else False
+
         if macro_close:
             with open('macro-close.csv', 'a') as fd:
                 fd.write(
@@ -136,6 +95,6 @@ class Strategy:
                 )
 
         return (
-            stop_loss_hit or take_profit_hit or macro_close or price_signal,
-            [stop_loss_hit, take_profit_hit, macro_close, price_signal]
+            stop_loss_hit or take_profit_hit or macro_close or price_signal or timer_hit,
+            [stop_loss_hit, take_profit_hit, macro_close, price_signal, timer_hit]
         )

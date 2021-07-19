@@ -88,6 +88,8 @@ class Position:
             self.exit_cause = 'Macro-RSI'
         elif causes[3]:
             self.exit_cause = 'RSI'
+        elif causes[4]:
+            self.exit_cause = 'Timer'
 
         self.exit_macro = macro_RSI
         self.exit_RSI = pair.RSI

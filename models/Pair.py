@@ -19,10 +19,6 @@ class Pair:
         """Return True if the RSI is overbought or oversold, according to the strategy."""
         return self.RSI >= strategy.max or self.RSI <= strategy.min
 
-    def compute_strength(self):
-        """Calculate the strength of the pair's indicator."""
-        self.strength = abs(50 - self.RSI)
-
     def determine_position_side(self, macro_RSI):
         """Return 'sell' if the asset should be shorted or 'buy' if it should be longed."""
         # In both cases, follow the trend if the RSI is extreme, else look for the reverse
