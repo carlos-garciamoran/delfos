@@ -51,12 +51,12 @@ class Strategy:
 
     def __str__(self):
         return self.name + '\n' \
-                f'\treal         = {self.real}\n' \
-                f'\tmin, max     = {self.min}, {self.max}\n' \
-                f'\tstop_loss    = {self.stop_loss}\n' \
-                f'\ttake_profit  = {self.take_profit}\n' \
-                f'\tprofit_close = {self.profit_close}\n' \
-                f'\trisk         = {self.risk}\n'
+            f'\treal         = {self.real}\n' \
+            f'\tmin, max     = {self.min}, {self.max}\n' \
+            f'\tstop_loss    = {self.stop_loss}\n' \
+            f'\ttake_profit  = {self.take_profit}\n' \
+            f'\tprofit_close = {self.profit_close}\n' \
+            f'\trisk         = {self.risk}\n'
 
     def determine_position_cost(self):
         """Calculate the position size according to account and strategy parameters."""
@@ -71,8 +71,8 @@ class Strategy:
             macro_close = True if macro_RSI <= MACRO_RSI_MIN else False
             price_signal = pair.RSI >= self.max
 
-            if self.profit_close:
-                price_signal = price_signal and pair.price >= position.entry_price
+            if self.profit_close and price_signal:
+                price_signal = pair.price >= position.entry_price
         else:
             stop_loss_hit = pair.price >= position.stop_loss
             take_profit_hit = pair.price <= position.take_profit
@@ -80,19 +80,12 @@ class Strategy:
             macro_close = True if macro_RSI >= MACRO_RSI_MAX else False
             price_signal = pair.RSI <= self.min
 
-            if self.profit_close:
-                price_signal = price_signal and pair.price <= position.entry_price
+            if self.profit_close and price_signal:
+                price_signal = pair.price <= position.entry_price
 
         # Calculate the position's length in minutes
         position_duration = (datetime.now() - position.opened_at).seconds / 60
-
         timer_hit = True if position_duration >= TIMER_TRIGGER else False
-
-        if macro_close:
-            with open('macro-close.csv', 'a') as fd:
-                fd.write(
-                    f'{str(position.__dict__)},{str(pair.__dict__)},{macro_RSI:.2f}\n'
-                )
 
         return (
             stop_loss_hit or take_profit_hit or macro_close or price_signal or timer_hit,

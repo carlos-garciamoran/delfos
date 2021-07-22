@@ -65,17 +65,17 @@ class Position:
 
     def __str__(self):
         return f'{self.symbol} {self.side}\n' \
-                f'\tcost        = {self.cost:.4f}\n' \
-                f'\tsize        = {self.size}\n' \
-                f'\topened_at   = {self.opened_at}\n' \
-                f'\tentry_price = {self.entry_price}\n' \
-                f'\tstop_loss   = {self.stop_loss:.4f}\n' \
-                f'\ttake_profit = {self.take_profit:.4f}\n' \
-                f'\texit_price  = {self.exit_price}\n' \
-                f'\tclosed_at   = {self.closed_at}\n' \
-                f'\tfee         = {self.fee:.4f}\n' \
-                f'\tpnl         = {self.pnl}\n' \
-                f'\tnet_pnl     = {self.net_pnl:.4f}\n'
+            f'\tcost        = {self.cost:.4f}\n' \
+            f'\tsize        = {self.size}\n' \
+            f'\topened_at   = {self.opened_at}\n' \
+            f'\tentry_price = {self.entry_price}\n' \
+            f'\tstop_loss   = {self.stop_loss:.4f}\n' \
+            f'\ttake_profit = {self.take_profit:.4f}\n' \
+            f'\texit_price  = {self.exit_price}\n' \
+            f'\tclosed_at   = {self.closed_at}\n' \
+            f'\tfee         = {self.fee:.4f}\n' \
+            f'\tpnl         = {self.pnl}\n' \
+            f'\tnet_pnl     = {self.net_pnl:.4f}\n'
 
 
     def set_SL_and_TP(self, strategy):

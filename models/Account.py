@@ -35,15 +35,15 @@ class Account:
 
     def __str__(self):
         return self.strategy.name + '\n' \
-                f'\tallocated    = {self.allocated:4f}\n' \
-                f'\tavailable    = {self.available:4f}\n' \
-                f'\tfree_slots   = {self.free_trading_slots}\n' \
-                f'\tinitial_size = {self.INITIAL_SIZE:4f}\n' \
-                f'\tpositions    = {len(self.positions)}\n' \
-                f'\tpotential    = {len(self.potential)}\n' \
-                f'\tfees         = {self.fees:4f}\n' \
-                f'\tpnl          = {self.pnl:4f}\n' \
-                f'\twins, loses  = {self.wins}, {self.loses}\n'
+            f'\tallocated    = {self.allocated:4f}\n' \
+            f'\tavailable    = {self.available:4f}\n' \
+            f'\tfree_slots   = {self.free_trading_slots}\n' \
+            f'\tinitial_size = {self.INITIAL_SIZE:4f}\n' \
+            f'\tpositions    = {len(self.positions)}\n' \
+            f'\tpotential    = {len(self.potential)}\n' \
+            f'\tfees         = {self.fees:4f}\n' \
+            f'\tpnl          = {self.pnl:4f}\n' \
+            f'\twins, loses  = {self.wins}, {self.loses}\n'
 
     def log_new_order(self, position):
         """Add the position to its array and update the appropriate counters."""

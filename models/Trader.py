@@ -13,25 +13,27 @@ class Trader:
             'enableRateLimit': True
         })
 
-        # Pointer to self.trader.markets
-        self.markets = self.exchange.load_markets()
+        self.exchange.load_markets()
         self.symbols = self.filter_symbols()
 
     def filter_symbols(self):
         """Delete unwanted symbols from self.markets."""
-        for symbol in list(self.markets):
-            info = self.markets[symbol]['info']
+        markets = self.exchange.markets
+
+        for symbol in list(markets):
+            info = markets[symbol]['info']
             if info['quoteAsset'] != 'USDT' or \
                 info['contractType'] != 'PERPETUAL' or \
                 info['status'] != 'TRADING' or \
                 info['underlyingType'] != 'COIN':
                 # Skip non-USDT, non-perpetual, non-traded, and quarterlies contracts
-                del self.markets[symbol]
+                del markets[symbol]
                 continue
 
-        return list(self.markets)
+        return list(markets)
 
     def setup_real_account(self, account):
+        """Reset margins if wanted, close open positions and set account balance."""
         logger.warning('Found real strategy; reset margin and leverage? Takes about 2 minutes... (y/N) ', end='')
         answer = input()
         if answer == 'y' or answer == 'Y':
@@ -70,9 +72,9 @@ class Trader:
             lambda p: p['contracts'] != 0, self.exchange.fetchPositions()
         ))
 
-        if len(open_positions) > 0:
-            logger.debug(f'Found {len(open_positions)} open positions. Closing now...')
+        logger.debug(f'Found {len(open_positions)} open positions.')
 
+        if len(open_positions) > 0:
             for position in open_positions:
                 symbol, side = position['symbol'], position['side']
                 inverted_side = 'sell' if side == 'long' else 'buy'

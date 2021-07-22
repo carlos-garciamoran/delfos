@@ -120,7 +120,7 @@ def trade(pairs):
         for position in account.positions:
             opened_positions[position.symbol] = position
 
-        logger.debug(f'🔍 Closing {len(opened_positions)} positions for {strategy.name}...')
+        logger.debug(f'🔍 Checking {len(opened_positions)} positions for {strategy.name}...')
 
         # First, close all necessary positions for the given strategy
         for pair in pairs:
@@ -147,7 +147,7 @@ def trade(pairs):
         # Then, sort potential positions so most extreme RSIs get priority (i.e. positions are opened first)
         account.potential.sort(key=lambda p: p.strength, reverse=True)
 
-        logger.debug(f'🔎 Trying to open {len(account.potential)} positions...')
+        logger.debug(f'🔎 Got {len(account.potential)} potential positions...')
 
         # Finally, open the interesting positions
         open_new_positions(strategy, opened_positions)
@@ -204,6 +204,10 @@ def close_if_needed(position, pair, strategy):
             msg += '🤝 TP hit\n'
         elif causes[2]:
             msg += '🎛  Macro signal\n'
+
+            # NOTE: is this data still useful?
+            with open('macro-close.csv', 'a') as fd:
+                fd.write(f'{str(position.__dict__)},{str(pair.__dict__)},{macro_RSI:.2f}\n')
         elif causes[3]:
             msg += '📞 Price signal hit\n'
         elif causes[4]:
