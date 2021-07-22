@@ -33,7 +33,7 @@ class Strategy:
         if self.real:
             self.name += '_REAL'
         else:
-            self.trader = None
+            self.exchange = None
 
         # Create dedicated trading account and link it to the strategy
         self.account = Account(self, initial_account_size)

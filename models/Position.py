@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from loguru import logger
+
 
 class Position:
     def __init__(self, pair, side, cost, strategy, macro_RSI):
@@ -10,9 +12,11 @@ class Position:
 
         if strategy.real:
             tentative_size = cost / pair.price  # base currency (COIN)
-            order = strategy.trader.create_order(
+            order = strategy.exchange.create_order(
                 pair.symbol, 'MARKET', side, tentative_size
             )
+            logger.info('Dumping created order...')
+            logger.info(order)
 
             self.opened_at = datetime.now()
             self.entry_price = order['price']  # quote currency (USDT)
@@ -23,15 +27,20 @@ class Position:
             inverted_side = 'sell' if side == 'buy' else 'buy'
 
             # Create orders with the returned base size
-            sl_order = strategy.trader.create_order(
+            sl_order = strategy.exchange.create_order(
                 self.symbol, 'STOP_MARKET', inverted_side, self.size, None, {'stopPrice': self.stop_loss}
             )
+            logger.info('Dumping created SL...')
+            logger.info(sl_order)
+
             self.sl_id = sl_order['id']
             self.stop_loss = sl_order['stopPrice']
 
-            tp_order = strategy.trader.create_order(
+            tp_order = strategy.exchange.create_order(
                 self.symbol, 'TAKE_PROFIT_MARKET', inverted_side, self.size, None, {'stopPrice': self.take_profit}
             )
+            logger.info('Dumping created TP...')
+            logger.info(tp_order)
             self.tp_id = tp_order['id']
             self.take_profit = tp_order['stopPrice']
         else:
@@ -96,7 +105,7 @@ class Position:
 
         if strategy.real:
             # Close all symbol orders (i.e. TP & SL) with a single call (weight = 1)
-            strategy.trader.fapiPrivate_delete_allopenorders({
+            strategy.exchange.fapiPrivate_delete_allopenorders({
                 'symbol': self.symbol.replace('/', '')
             })
 
@@ -106,22 +115,27 @@ class Position:
                 inverted_side = 'sell' if self.side == 'buy' else 'buy'
 
                 # Close the order manually (weight = 1)
-                order = strategy.trader.create_order(
+                order = strategy.exchange.create_order(
                     self.symbol, 'MARKET', inverted_side, self.size
                 )
+                logger.info('Closed position, dumping order...')
             else:
                 # NOTE: this assumes order['status'] == 'FILLED'
                 # Retrieve closing price from SL or TP to log exit price precisely (weight = 1)
-                order = strategy.trader.fetch_order(
+                order = strategy.exchange.fetch_order(
                     self.sl_id if causes[0] else self.tp_id,
                     self.symbol
                 )
+                logger.info('SL/TP hit, dumping order...')
+
+            logger.info(order)
 
             self.exit_price = order['price']
             self.fee += order['cost'] * 0.00036  # the cost has the raw P&L included
         else:
             self.exit_price = pair.price
 
+        logger.info(self)
         self.closed_at = datetime.now()
 
         if self.side == 'buy':

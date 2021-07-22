@@ -11,11 +11,14 @@ from loguru import logger
 
 from models.Position import Position
 from models.Strategy import Strategy
+from models.Trader import Trader
 
 import utils.aggregator as aggregator
 from utils.constants import *
 
 accounts, strategies, symbols = [], [], []
+trader, exchange = None, None
+
 macro_RSI = 0.0
 
 emojis = {
@@ -25,7 +28,14 @@ emojis = {
 
 
 def main():
-    global macro_RSI
+    """Setup the session strategies and run the main trading loop."""
+    global macro_RSI, symbols
+    global trader   # split because it's G
+
+    trader = Trader()
+    symbols = trader.symbols
+
+    logger.info(f'Loaded {len(symbols)} symbols')
 
     setup_accounts_and_strategies()
 
@@ -49,17 +59,21 @@ def main():
             trade(pairs)
         except KeyboardInterrupt:
             logger.warning('Heard CTRL-C!')
-            logger.warning('Do you want to quit? Open positions will be left open! (y/N) ', end='')
+            logger.warning('Quit now? All open positions will be CLOSED! (y/N) ', end='')
             answer = input()
 
             if answer == 'y' or answer == 'Y':
-                logger.info('Exited gracefully')
+                if exchange is not None:
+                    # NOTE: this function does not log the closed positions to closed.json
+                    trader.close_all_positions()
+
+                logger.info('Exited gracefully.')
                 return
 
 
 def setup_accounts_and_strategies():
     """Parse JSON strategies and set up an account and directory for new ones."""
-    real = None
+    global exchange
 
     with open('strategies.json') as fd:
         data = json.loads(fd.read())
@@ -70,7 +84,10 @@ def setup_accounts_and_strategies():
             account = strategy.account
 
             if strategy.real:
-                real = strategy
+                exchange = trader.exchange
+                trader.setup_real_account(account)
+
+                strategy.exchange = exchange   # link the trader object to the strategy
         except KeyError as e:
             logger.error(f'Required strategy parameter {e} missing, skipping...')
             continue
@@ -86,82 +103,10 @@ def setup_accounts_and_strategies():
         accounts.append(account)
         strategies.append(strategy)
 
-        if not strategy.real:
-            logger.info(strategy)
-            logger.info(account)
-
-    trader = init_trader(real)
-
-    if real:
-        real.trader = trader
-        logger.info(real)
-        logger.info(real.account)
+        logger.info(strategy)
+        logger.info(account)
 
     logger.info(f'Running {len(strategies)} strategies')
-
-
-def init_trader(real):
-    global symbols
-
-    trader = ccxt.binanceusdm({
-        'apiKey': BINANCE_APIKEY,
-        'secret': BINANCE_SECRETKEY,
-        'enableRateLimit': True
-    })
-    markets = trader.load_markets()
-
-    for symbol in list(markets):
-        info = markets[symbol]['info']
-        if info['quoteAsset'] != 'USDT' or \
-            info['contractType'] != 'PERPETUAL' or \
-            info['status'] != 'TRADING' or \
-            info['underlyingType'] != 'COIN':
-            # Skip non-USDT, non-perpetual, non-traded, and quarterlies contracts
-            del markets[symbol]
-            continue
-
-    symbols = list(markets)
-
-    logger.info(f'Loaded {len(symbols)} symbols')
-
-    if real:
-        logger.debug('Found real account; setting up...')
-
-        real.account.available = trader.fetch_balance()['USDT']['free']
-
-        logger.debug('Adjusting margins and leverage...')
-        for symbol in list(markets):
-            logger.debug(symbol[:-5])
-            alt_symbol = symbol.replace('/', '')
-
-            trader.fapiPrivate_post_leverage({'symbol': alt_symbol, 'leverage': 1})
-
-            try:
-                trader.fapiPrivate_post_margintype({
-                    'symbol': alt_symbol, 'marginType': 'ISOLATED'
-                })
-            except ccxt.ExchangeError as e:
-                logger.debug(e)
-                continue
-            else:
-                logger.info(f'Margin adjusted for {symbol}')
-
-        logger.debug('Fetching and closing opened positions before launching...')
-        for position in trader.fetchPositions():
-            if position['entryPrice']:
-                symbol, side = position['symbol'], position['side']
-                inverted_side = 'sell' if side == 'long' else 'buy'
-                size = abs(float(position['info']['positionAmt']))
-
-                logger.info(f'Closing {symbol} {side} ({size:g})...')
-
-                # Close the existing order
-                trader.create_order(symbol, 'MARKET', inverted_side, size)
-
-                # Cancel the corresponding SL & TP orders
-                trader.fapiPrivate_delete_allopenorders({'symbol': alt_symbol})
-        
-        return trader
 
 
 def trade(pairs):
@@ -175,7 +120,7 @@ def trade(pairs):
         for position in account.positions:
             opened_positions[position.symbol] = position
 
-        logger.debug(f'🔍 Closing positions for {strategy.name}...')
+        logger.debug(f'🔍 Closing {len(opened_positions)} positions for {strategy.name}...')
 
         # First, close all necessary positions for the given strategy
         for pair in pairs:
@@ -189,7 +134,7 @@ def trade(pairs):
                 if pair.symbol not in logged_pairs:
                     # HACK: move call after strategies loop is over
                     with open('price-history.csv', 'a') as fd:
-                        fd.write(f'{pair.symbol},{pair.price},{pair.RSI},{datetime.now()}\n')
+                        fd.write(f'{pair.symbol[:-5]},{pair.price},{pair.RSI},{datetime.now()}\n')
 
                     logged_pairs.append(pair.symbol)
 
@@ -225,10 +170,12 @@ def close_if_needed(position, pair, strategy):
             position.close(pair, strategy, causes, macro_RSI)
         # TODO: determine what to do with this error
         except ccxt.InsufficientFunds as e:
+            # TODO: retrieve balance
             logger.error('InsufficientFunds: failed closing ' \
                 f'{position.side} {pair.symbol} with ${position.cost:.4f} ({e})'
             )
             logger.info(account)
+            logger.info(strategy.exchange.fetch_balance()['USDT'])
 
             return
         # TODO: determine what to do with this error
@@ -326,7 +273,7 @@ def open_new_positions(strategy, opened_positions):
             # HACK: instead of catching the error, before opening the order, check
             #       `tentative_size <= strategy.markets['limits']['amount']['min']` is True
             except ccxt.ExchangeError as e:
-                logger.error('Caught ' + e)
+                logger.error(f'Caught {e}')
                 logger.error(
                     f'Failed opening {side} {pair.symbol} with ${cost:.4f} ({cost / pair.price})'
                 )
