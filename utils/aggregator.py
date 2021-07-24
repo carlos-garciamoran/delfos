@@ -27,7 +27,7 @@ def get_market_data(symbols):
 
     macro_RSI = sum(map(lambda p: p.RSI, pairs)) / len(pairs)
 
-    with open('macro-trend.csv', 'a') as fd:
+    with open('macro-history.csv', 'a') as fd:
         fd.write(f'{macro_RSI},{datetime.now()}\n')
 
     return pairs, macro_RSI, None

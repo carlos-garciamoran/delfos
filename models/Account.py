@@ -3,15 +3,13 @@ import math
 
 
 class Account:
-    def __init__(self, strategy, initial_size):
-        self.INITIAL_SIZE = initial_size  # constant variable
-        self.strategy = strategy  # Strategy object associated with the account
+    def __init__(self, initial_size):
+        self.INITIAL_SIZE = initial_size  # constant
+        self.strategy = None  # Strategy object associated with the account
 
         self.allocated = 0.0  # capital allocated in positions (USDT)
         self.available = initial_size  # free capital + realized pnl - fees
-        self.free_trading_slots = math.floor(
-            self.available * strategy.stop_loss * strategy.risk * 100
-        )
+        self.free_trading_slots = None
 
         # Arrays storing Position objects
         self.positions = []  # currently open positions

@@ -9,40 +9,10 @@ class Position:
         self.side = side           # 'buy', 'sell'
         self.entry_RSI = pair.RSI     # for post-analysis purposes
         self.entry_macro = macro_RSI  # for post-analysis purposes
+        self.entry_trigger = pair.tactic  # 'trend', 'reversal'
 
         if strategy.real:
-            tentative_size = cost / pair.price  # base currency (COIN)
-            order = strategy.exchange.create_order(
-                pair.symbol, 'MARKET', side, tentative_size
-            )
-            logger.info('Dumping created order...')
-            logger.info(order)
-
-            self.opened_at = datetime.now()
-            self.entry_price = order['price']  # quote currency (USDT)
-            self.cost = order['cost']    # quote currency
-            self.size = order['filled']  # base currency
-
-            self.set_SL_and_TP(strategy)  # NOTE: called here due to dependence on self.entry_price
-            inverted_side = 'sell' if side == 'buy' else 'buy'
-
-            # Create orders with the returned base size
-            sl_order = strategy.exchange.create_order(
-                self.symbol, 'STOP_MARKET', inverted_side, self.size, None, {'stopPrice': self.stop_loss}
-            )
-            logger.info('Dumping created SL...')
-            logger.info(sl_order)
-
-            self.sl_id = sl_order['id']
-            self.stop_loss = sl_order['stopPrice']
-
-            tp_order = strategy.exchange.create_order(
-                self.symbol, 'TAKE_PROFIT_MARKET', inverted_side, self.size, None, {'stopPrice': self.take_profit}
-            )
-            logger.info('Dumping created TP...')
-            logger.info(tp_order)
-            self.tp_id = tp_order['id']
-            self.take_profit = tp_order['stopPrice']
+            self.create_orders(pair, side, cost, strategy)
         else:
             self.opened_at = datetime.now()
             self.entry_price = pair.price
@@ -52,9 +22,9 @@ class Position:
             self.set_SL_and_TP(strategy)
             self.sl_id, self.tp_id = None, None
 
-        self.exit_cause = None
         self.exit_macro = None
         self.exit_RSI = None
+        self.exit_trigger = None
 
         self.fee = self.cost * 0.00036  # opening taker fee (USDT)
         self.exit_price = None
@@ -65,18 +35,53 @@ class Position:
 
     def __str__(self):
         return f'{self.symbol} {self.side}\n' \
-            f'\tcost        = {self.cost:.4f}\n' \
-            f'\tsize        = {self.size}\n' \
-            f'\topened_at   = {self.opened_at}\n' \
-            f'\tentry_price = {self.entry_price}\n' \
-            f'\tstop_loss   = {self.stop_loss:.4f}\n' \
-            f'\ttake_profit = {self.take_profit:.4f}\n' \
-            f'\texit_price  = {self.exit_price}\n' \
-            f'\tclosed_at   = {self.closed_at}\n' \
-            f'\tfee         = {self.fee:.4f}\n' \
-            f'\tpnl         = {self.pnl}\n' \
-            f'\tnet_pnl     = {self.net_pnl:.4f}\n'
+            f'\tcost          = {self.cost:.4f}\n' \
+            f'\tsize          = {self.size}\n' \
+            f'\topened_at     = {self.opened_at}\n' \
+            f'\tentry_price   = {self.entry_price}\n' \
+            f'\tentry_trigger = {self.entry_trigger}\n' \
+            f'\tstop_loss     = {self.stop_loss:.4f}\n' \
+            f'\ttake_profit   = {self.take_profit:.4f}\n' \
+            f'\texit_price    = {self.exit_price}\n' \
+            f'\texit_trigger  = {self.exit_trigger}\n' \
+            f'\tclosed_at     = {self.closed_at}\n' \
+            f'\tfee           = {self.fee:.4f}\n' \
+            f'\tpnl           = {self.pnl}\n' \
+            f'\tnet_pnl       = {self.net_pnl:.4f}\n'
 
+    def create_orders(self, pair, side, cost, strategy):
+        tentative_size = cost / pair.price  # base currency (COIN)
+        order = strategy.exchange.create_order(
+            pair.symbol, 'MARKET', side, tentative_size
+        )
+        logger.info('Dumping created order...')
+        logger.info(order)
+
+        self.opened_at = datetime.now()
+        self.entry_price = order['price']  # quote currency (USDT)
+        self.cost = order['cost']    # quote currency
+        self.size = order['filled']  # base currency
+
+        self.set_SL_and_TP(strategy)  # NOTE: called here due to dependence on self.entry_price
+        inverted_side = 'sell' if side == 'buy' else 'buy'
+
+        # Create orders with the returned base size
+        sl_order = strategy.exchange.create_order(
+            self.symbol, 'STOP_MARKET', inverted_side, self.size, None, {'stopPrice': self.stop_loss}
+        )
+        logger.info('Dumping created SL...')
+        logger.info(sl_order)
+
+        self.sl_id = sl_order['id']
+        self.stop_loss = sl_order['stopPrice']
+
+        tp_order = strategy.exchange.create_order(
+            self.symbol, 'TAKE_PROFIT_MARKET', inverted_side, self.size, None, {'stopPrice': self.take_profit}
+        )
+        logger.info('Dumping created TP...')
+        logger.info(tp_order)
+        self.tp_id = tp_order['id']
+        self.take_profit = tp_order['stopPrice']
 
     def set_SL_and_TP(self, strategy):
         """Calculates and sets stop loss and take profit prices."""
@@ -89,19 +94,17 @@ class Position:
 
     def close(self, pair, strategy, causes, macro_RSI):
         """Mark the position as closed at the given exit_price and calculate P&L and fees."""
-        if causes[0]:
-            self.exit_cause = 'SL'
-        elif causes[1]:
-            self.exit_cause = 'TP'
-        elif causes[2]:
-            self.exit_cause = 'Macro-RSI'
-        elif causes[3]:
-            self.exit_cause = 'RSI'
-        elif causes[4]:
-            self.exit_cause = 'Timer'
-
         self.exit_macro = macro_RSI
         self.exit_RSI = pair.RSI
+
+        if causes[0]:
+            self.exit_trigger = 'Tactic'
+        elif causes[1]:
+            self.exit_trigger = 'SL'
+        elif causes[2]:
+            self.exit_trigger = 'TP'
+        elif causes[3]:
+            self.exit_trigger = 'Timer'
 
         if strategy.real:
             # Close all symbol orders (i.e. TP & SL) with a single call (weight = 1)
@@ -110,7 +113,7 @@ class Position:
             })
 
             # Order may have already been closed by exchange due to TP or SL being hit
-            if not (causes[0] or causes[1]):
+            if not (causes[1] or causes[2]):
                 # Neither SL or TP have been hit, then create a market order for closing the position
                 inverted_side = 'sell' if self.side == 'buy' else 'buy'
 

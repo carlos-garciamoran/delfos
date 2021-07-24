@@ -1,33 +1,37 @@
 from datetime import datetime
 
-from models.Account import Account
-from utils.constants import MACRO_RSI_MAX, MACRO_RSI_MIN, TIMER_TRIGGER
+from utils.constants import TIMER_TRIGGER
 
 
 class Strategy:
-    def __init__(self, defaults, strategy):
-        self.min, self.max = strategy['constants'][0], strategy['constants'][1]
+    def __init__(self, account, defaults, strategy):
+        self.RSI_MIN = strategy['RSI'][0]
+        self.RSI_MAX = strategy['RSI'][1]
 
+        self.MACRO_RSI_MIN = strategy['macro_RSI'][0] \
+            if 'macro_RSI' in strategy.keys() \
+            else defaults['macro_RSI'][0]
+        self.MACRO_RSI_MAX = strategy['macro_RSI'][1] \
+            if 'macro_RSI' in strategy.keys() \
+            else defaults['macro_RSI'][1]
         self.profit_close = strategy['profit_close'] \
             if 'profit_close' in strategy.keys() \
+            else defaults['profit_close']
+        self.real = strategy['REAL'] \
+            if 'REAL' in strategy.keys() \
             else False
+        self.risk = strategy['risk'] \
+            if 'risk' in strategy.keys() \
+            else defaults['risk']
         self.stop_loss = strategy['stop_loss'] \
             if 'stop_loss' in strategy.keys() \
             else defaults['stop_loss']
         self.take_profit = strategy['take_profit'] \
             if 'take_profit' in strategy.keys() \
             else defaults['take_profit']
-        self.risk = strategy['risk'] \
-            if 'risk' in strategy.keys() \
-            else defaults['risk']
-        self.real = strategy['REAL'] \
-            if 'REAL' in strategy.keys() \
-            else False
-        initial_account_size = strategy['account_size'] \
-            if 'account_size' in strategy.keys() \
-            else defaults['account_size']
 
-        self.name = f'{self.min}-{self.max}_SL-{(self.stop_loss*100):g}_TP-{(self.take_profit*100):g}'
+        # TODO: think of a better alternative than a name (e.g. dump strategy attributes)
+        self.name = f'{self.RSI_MIN}-{self.RSI_MAX}_SL-{(self.stop_loss*100):g}_TP-{(self.take_profit*100):g}'
         self.name += '_profit' if self.profit_close else ''
 
         if self.real:
@@ -35,59 +39,68 @@ class Strategy:
         else:
             self.exchange = None
 
-        # Create dedicated trading account and link it to the strategy
-        self.account = Account(self, initial_account_size)
+        self.account = account
 
     def __eq__(self, other):
         # NOTE: `self.account` is not compared on purpose
         return self.name == other.name \
-            and self.min == other.min \
-            and self.max == other.max \
+            and self.RSI_MIN == other.RSI_MIN \
+            and self.RSI_MAX == other.RSI_MAX \
+            and self.MACRO_RSI_MIN == other.MACRO_RSI_MIN \
+            and self.MACRO_RSI_MAX == other.MACRO_RSI_MAX \
             and self.profit_close == other.profit_close \
+            and self.real == other.real \
+            and self.risk == other.risk \
             and self.stop_loss == other.stop_loss \
             and self.take_profit == other.take_profit \
-            and self.risk == other.risk \
-            and self.real == other.real
 
     def __str__(self):
         return self.name + '\n' \
-            f'\treal         = {self.real}\n' \
-            f'\tmin, max     = {self.min}, {self.max}\n' \
-            f'\tstop_loss    = {self.stop_loss}\n' \
-            f'\ttake_profit  = {self.take_profit}\n' \
+            f'\tRSI_MIN = {self.RSI_MIN}\n' \
+            f'\tRSI_MAX = {self.RSI_MAX}\n' \
+            f'\tMACRO_RSI_MIN = {self.MACRO_RSI_MIN}\n' \
+            f'\tMACRO_RSI_MAX = {self.MACRO_RSI_MAX}\n' \
             f'\tprofit_close = {self.profit_close}\n' \
-            f'\trisk         = {self.risk}\n'
+            f'\treal         = {self.real}\n' \
+            f'\trisk         = {self.risk}\n' \
+            f'\tstop_loss    = {self.stop_loss}\n' \
+            f'\ttake_profit  = {self.take_profit}\n'
 
     def determine_position_cost(self):
         """Calculate the position size according to account and strategy parameters."""
         return (self.account.allocated + self.account.available) * self.risk / self.stop_loss
 
     def should_close(self, position, pair, macro_RSI):
-        """Return True if the RSI is overbought in a BUY position or oversold in a SELL position."""
+        """Return if the position should be closed according to tactic, SL, TP, and position timer."""
         if position.side == 'buy':
+            if position.entry_trigger == 'trend':
+                price_signal_hit = True if macro_RSI < self.MACRO_RSI_MAX else False
+            else:
+                price_signal_hit = pair.RSI >= self.RSI_MAX
+
+                # NOTE: consider using profit_close in both 'trend' and 'reversal'
+                if self.profit_close and price_signal_hit:
+                    price_signal_hit = pair.price >= position.entry_price
+
             stop_loss_hit = pair.price <= position.stop_loss
             take_profit_hit = pair.price >= position.take_profit
-
-            macro_close = True if macro_RSI <= MACRO_RSI_MIN else False
-            price_signal = pair.RSI >= self.max
-
-            if self.profit_close and price_signal:
-                price_signal = pair.price >= position.entry_price
         else:
+            if position.entry_trigger == 'trend':
+                price_signal_hit = True if macro_RSI > self.MACRO_RSI_MIN else False
+            else:
+                price_signal_hit = pair.RSI <= self.RSI_MIN
+
+                if self.profit_close and price_signal_hit:
+                    price_signal_hit = pair.price <= position.entry_price
+
             stop_loss_hit = pair.price >= position.stop_loss
             take_profit_hit = pair.price <= position.take_profit
 
-            macro_close = True if macro_RSI >= MACRO_RSI_MAX else False
-            price_signal = pair.RSI <= self.min
-
-            if self.profit_close and price_signal:
-                price_signal = pair.price <= position.entry_price
-
-        # Calculate the position's length in minutes
+        # Calculate the position's duration in minutes
         position_duration = (datetime.now() - position.opened_at).seconds / 60
         timer_hit = True if position_duration >= TIMER_TRIGGER else False
 
         return (
-            stop_loss_hit or take_profit_hit or macro_close or price_signal or timer_hit,
-            [stop_loss_hit, take_profit_hit, macro_close, price_signal, timer_hit]
+            price_signal_hit or stop_loss_hit or take_profit_hit or timer_hit,
+            [price_signal_hit, stop_loss_hit, take_profit_hit, timer_hit]
         )

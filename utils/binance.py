@@ -2,22 +2,16 @@ import hmac
 import time
 
 import numpy as np
-from dotenv import dotenv_values, load_dotenv
 from requests import Session
 from urllib import parse as urllib
 
-from utils.constants import INTERVAL
+from utils.constants import BINANCE_APIKEY, BINANCE_SECRETKEY, INTERVAL
 
-
-load_dotenv()
-
-APIKEY = dotenv_values()['BINANCE_APIKEY']
-SECRETKEY = dotenv_values()['BINANCE_SECRETKEY'].encode()
 
 BASEURL = 'https://fapi.binance.com/fapi'
 
 s = Session()
-s.headers.update({ 'X-MBX-APIKEY': APIKEY })
+s.headers.update({ 'X-MBX-APIKEY': BINANCE_APIKEY })
 
 
 # NOTE: unused; TODO: parse used JSON objects
@@ -64,7 +58,7 @@ def sign_timestamp():
     params = { 'timestamp': int(time.time() * 1000) }
     payload = urllib.urlencode(params).encode()
 
-    signature = hmac.new(SECRETKEY, payload, 'SHA256').hexdigest()
+    signature = hmac.new(BINANCE_SECRETKEY, payload, 'SHA256').hexdigest()
     params['signature'] = signature
 
     return params

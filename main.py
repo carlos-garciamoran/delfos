@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 import sys
 from datetime import datetime
 from os import chdir, listdir
@@ -9,10 +10,10 @@ from shutil import copyfile
 import ccxt
 from loguru import logger
 
+from models.Account import Account
 from models.Position import Position
 from models.Strategy import Strategy
 from models.Trader import Trader
-
 import utils.aggregator as aggregator
 from utils.constants import *
 
@@ -55,7 +56,8 @@ def main():
                 logger.critical(HTTP_error[1])
                 return
 
-            logger.debug(f'🎛  Macro-RSI: {macro_RSI:.2f}')
+            logger.info(f'🎛  Macro-RSI: {macro_RSI:.2f}')
+
             trade(pairs)
         except KeyboardInterrupt:
             logger.warning('Heard CTRL-C!')
@@ -64,7 +66,6 @@ def main():
 
             if answer == 'y' or answer == 'Y':
                 if exchange is not None:
-                    # NOTE: this function does not log the closed positions to closed.json
                     trader.close_all_positions()
 
                 logger.info('Exited gracefully.')
@@ -78,10 +79,19 @@ def setup_accounts_and_strategies():
     with open('strategies.json') as fd:
         data = json.loads(fd.read())
 
-    for strategy_data in data['strategies']:
+    for raw_strategy in data['strategies']:
         try:
-            strategy = Strategy(data['defaults'], strategy_data)
-            account = strategy.account
+            initial_account_size = raw_strategy['account_size'] \
+                if 'account_size' in raw_strategy.keys() \
+                else data['defaults']['account_size']
+
+            account = Account(initial_account_size)
+            strategy = Strategy(account, data['defaults'], raw_strategy)
+
+            account.strategy = strategy
+            account.free_trading_slots = math.floor(
+                account.available * strategy.stop_loss * strategy.risk * 100
+            )
 
             if strategy.real:
                 exchange = trader.exchange
@@ -130,24 +140,24 @@ def trade(pairs):
                 # HACK: move function to a Position method(?)
                 close_if_needed(position, pair, strategy)
 
-                # Log the pair of the open position if it has not been logged.
                 if pair.symbol not in logged_pairs:
-                    # HACK: move call after strategies loop is over
                     with open('price-history.csv', 'a') as fd:
                         fd.write(f'{pair.symbol[:-5]},{pair.price},{pair.RSI},{datetime.now()}\n')
 
                     logged_pairs.append(pair.symbol)
 
-            # Store pairs hitting price signal
-            if pair.is_interesting(strategy):
-                # NOTE: strength calculated here to save useless function call
-                pair.strength = abs(50 - pair.RSI)
+            # Store pairs hitting price signal and calculate its tactic and strength
+            if pair.is_interesting(macro_RSI, strategy):
                 account.potential.append(pair)
 
-        # Then, sort potential positions so most extreme RSIs get priority (i.e. positions are opened first)
+        # Then, sort potential pairs so most extreme RSIs get priority (i.e. positions are opened first)
         account.potential.sort(key=lambda p: p.strength, reverse=True)
 
-        logger.debug(f'🔎 Got {len(account.potential)} potential positions...')
+        # NOTE: FOR DEVELOPMENT PURPOSES!! BUG REMOVE ME BEFORE COMMIT
+        for pot in account.potential:
+            logger.info(pot)
+
+        logger.info(f'🔎 Got {len(account.potential)} potential positions...')
 
         # Finally, open the interesting positions
         open_new_positions(strategy, opened_positions)
@@ -199,18 +209,15 @@ def close_if_needed(position, pair, strategy):
             '     '
 
         if causes[0]:
-            msg += '⛔️ SL hit\n'
-        elif causes[1]:
-            msg += '🤝 TP hit\n'
-        elif causes[2]:
-            msg += '🎛  Macro signal\n'
+            msg += '📞 Price signal hit\n'
 
-            # NOTE: is this data still useful?
             with open('macro-close.csv', 'a') as fd:
                 fd.write(f'{str(position.__dict__)},{str(pair.__dict__)},{macro_RSI:.2f}\n')
+        elif causes[1]:
+            msg += '⛔️ SL hit\n'
+        elif causes[2]:
+            msg += '🤝 TP hit\n'
         elif causes[3]:
-            msg += '📞 Price signal hit\n'
-        elif causes[4]:
             msg += '⏱ Timer hit\n'
 
         logger.warning(msg)
@@ -248,15 +255,15 @@ def open_new_positions(strategy, opened_positions):
         # This check is needed in the edge case of `strategy.risk > strategy.stop_loss`
         if cost <= account.available and account.free_trading_slots >= 1:
             # By this point there is a price signal due to pair.is_interesting()
-            side = pair.determine_position_side(macro_RSI)
+            side = pair.determine_position_side(macro_RSI, strategy)
 
-            # HACK: move code away from open_positions. Simply check macro_RSI before including
-            #       pair in `account.potential` at `trade()`. Need to know `side` in advance
-            if macro_RSI <= MACRO_RSI_MIN and side == 'buy':
-                logger.debug('⛔ Skipping false-flag (BUY in bearish market)')
+            # HACK: move code away from this function. Simply check macro_RSI before including
+            #       pair in `account.potential` at `trade()`. NOTE: need to know `side` in advance
+            if macro_RSI <= strategy.MACRO_RSI_MIN and side == 'buy':
+                logger.info('⛔ Skipping false-flag (BUY in bearish market)')
                 continue
-            elif macro_RSI >= MACRO_RSI_MAX and side == 'sell':
-                logger.debug('⛔ Skipping false-flag (SELL in bullish market)')
+            elif macro_RSI >= strategy.MACRO_RSI_MAX and side == 'sell':
+                logger.info('⛔ Skipping false-flag (SELL in bullish market)')
                 continue
 
             # TODO: improve this error handling logic
@@ -269,7 +276,7 @@ def open_new_positions(strategy, opened_positions):
                 )
                 logger.info(account)
 
-                # HACK: could retrieve free USDT from Binance to open position accordingly
+                # HACK: retrieve free USDT from Binance to open position accordingly
                 # For insufficient margin, try opening the position with smaller cost (-10%).
                 # position = Position(pair, side, cost - (cost*.1), strategy)
                 continue
@@ -332,7 +339,7 @@ if __name__ == '__main__':
     copyfile('strategies.json', full_path + '/strategies.json')
     chdir(full_path)
 
-    with open('price-history.csv', 'w') as fd1, open('macro-trend.csv', 'w') as fd2:
+    with open('price-history.csv', 'w') as fd1, open('macro-history.csv', 'w') as fd2:
         fd1.write('symbol,price,RSI,timestamp\n')
         fd2.write('RSI,timestamp\n')
 
@@ -347,8 +354,6 @@ if __name__ == '__main__':
 
     logger.info('Logging at: ' + full_path)
     logger.info(f'INTERVAL: {INTERVAL}')
-    logger.info(f'MACRO_RSI_MAX: {MACRO_RSI_MAX}')
-    logger.info(f'MACRO_RSI_MIN: {MACRO_RSI_MIN}')
     logger.info(f'TIMER_TRIGGER: {TIMER_TRIGGER}')
 
     main()
