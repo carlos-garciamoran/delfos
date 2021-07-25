@@ -15,7 +15,7 @@ from models.Position import Position
 from models.Strategy import Strategy
 from models.Trader import Trader
 import utils.aggregator as aggregator
-from utils.constants import *
+from utils.constants import INTERVAL
 
 accounts, strategies, symbols = [], [], []
 trader, exchange = None, None
@@ -33,12 +33,14 @@ def main():
     global macro_RSI, symbols
     global trader   # split because it's G
 
+    logger.debug('Loading ccxt...')
     trader = Trader()
-    symbols = trader.symbols
 
+    symbols = trader.symbols
     logger.info(f'Loaded {len(symbols)} symbols')
 
     setup_accounts_and_strategies()
+    logger.info(f'Loaded {len(strategies)} strategies')
 
     while True:
         try:
@@ -99,14 +101,12 @@ def setup_accounts_and_strategies():
 
                 strategy.exchange = exchange   # link the trader object to the strategy
         except KeyError as e:
-            logger.error(f'Required strategy parameter {e} missing, skipping...')
-            continue
-
-        name = strategy.name
+            logger.critical(f'Required strategy parameter {e} missing, exiting...')
+            sys.exit(1)
 
         # Create files for position tracking
-        with open(name + '__closed.json', 'w') as fd1, \
-            open(name + '__opened.json', 'w') as fd2:
+        with open(strategy.name + '__closed.json', 'w') as fd1, \
+            open(strategy.name + '__opened.json', 'w') as fd2:
             fd1.write('[]\n')
             fd2.write('[]\n')
 
@@ -115,8 +115,6 @@ def setup_accounts_and_strategies():
 
         logger.info(strategy)
         logger.info(account)
-
-    logger.info(f'Running {len(strategies)} strategies')
 
 
 def trade(pairs):
@@ -152,10 +150,6 @@ def trade(pairs):
 
         # Then, sort potential pairs so most extreme RSIs get priority (i.e. positions are opened first)
         account.potential.sort(key=lambda p: p.strength, reverse=True)
-
-        # NOTE: FOR DEVELOPMENT PURPOSES!! BUG REMOVE ME BEFORE COMMIT
-        for pot in account.potential:
-            logger.info(pot)
 
         logger.info(f'🔎 Got {len(account.potential)} potential positions...')
 
@@ -202,7 +196,7 @@ def close_if_needed(position, pair, strategy):
 
         # Optimization happening here, baby ;)
         msg = '\n' \
-            f'     🔮 Strategy: {strategy.name}\n' \
+            f'     🔮 Strategy: {strategy.name} | 🧭 Tactic: {pair.tactic}\n' \
             f'     {emojis[position.net_pnl >= 0]} Closed {position.symbol} {position.side} at {position.exit_price}\n' \
             f'     💸 P&L: {position.pnl:.2f}%, ${position.net_pnl:.4f}\n' \
             f'     🧨 Fee: ${position.fee:.4f}\n' \
@@ -302,7 +296,7 @@ def open_new_positions(strategy, opened_positions):
             logger.info(position)
             account.log_new_order(position)
 
-            msg += '\n' \
+            msg += f'🧭 Tactic: {position.entry_trigger}\n' \
                 f'{emojis[side]:>6} {pair.symbol} {side} at {position.entry_price} with ${position.cost:.4f}\n' \
                 f'{"":>4} 🚫 SL: {position.stop_loss:.4f}\t\t 🤝 TP: {position.take_profit:.4f}\n'
 
@@ -354,6 +348,5 @@ if __name__ == '__main__':
 
     logger.info('Logging at: ' + full_path)
     logger.info(f'INTERVAL: {INTERVAL}')
-    logger.info(f'TIMER_TRIGGER: {TIMER_TRIGGER}')
 
     main()

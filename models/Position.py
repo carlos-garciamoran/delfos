@@ -7,8 +7,9 @@ class Position:
     def __init__(self, pair, side, cost, strategy, macro_RSI):
         self.symbol = pair.symbol  # symbol name
         self.side = side           # 'buy', 'sell'
-        self.entry_RSI = pair.RSI     # for post-analysis purposes
-        self.entry_macro = macro_RSI  # for post-analysis purposes
+
+        self.entry_macro_RSI = macro_RSI  # for post-analysis purposes
+        self.entry_RSI = pair.RSI         # for post-analysis purposes
         self.entry_trigger = pair.tactic  # 'trend', 'reversal'
 
         if strategy.real:
@@ -22,7 +23,7 @@ class Position:
             self.set_SL_and_TP(strategy)
             self.sl_id, self.tp_id = None, None
 
-        self.exit_macro = None
+        self.exit_macro_RSI = None
         self.exit_RSI = None
         self.exit_trigger = None
 
@@ -39,10 +40,14 @@ class Position:
             f'\tsize          = {self.size}\n' \
             f'\topened_at     = {self.opened_at}\n' \
             f'\tentry_price   = {self.entry_price}\n' \
+            f'\tentry_RSI       = {self.entry_RSI:.2f}\n' \
+            f'\tentry_macro_RSI = {self.entry_macro_RSI:.2f}\n' \
             f'\tentry_trigger = {self.entry_trigger}\n' \
             f'\tstop_loss     = {self.stop_loss:.4f}\n' \
             f'\ttake_profit   = {self.take_profit:.4f}\n' \
             f'\texit_price    = {self.exit_price}\n' \
+            f'\texit_RSI       = {self.exit_RSI}\n' \
+            f'\texit_macro_RSI = {self.exit_macro_RSI}\n' \
             f'\texit_trigger  = {self.exit_trigger}\n' \
             f'\tclosed_at     = {self.closed_at}\n' \
             f'\tfee           = {self.fee:.4f}\n' \
@@ -98,13 +103,13 @@ class Position:
         self.exit_RSI = pair.RSI
 
         if causes[0]:
-            self.exit_trigger = 'Tactic'
+            self.exit_trigger = 'tactic'
         elif causes[1]:
             self.exit_trigger = 'SL'
         elif causes[2]:
             self.exit_trigger = 'TP'
         elif causes[3]:
-            self.exit_trigger = 'Timer'
+            self.exit_trigger = 'timer'
 
         if strategy.real:
             # Close all symbol orders (i.e. TP & SL) with a single call (weight = 1)
@@ -135,10 +140,11 @@ class Position:
 
             self.exit_price = order['price']
             self.fee += order['cost'] * 0.00036  # the cost has the raw P&L included
+
+            logger.info(self)
         else:
             self.exit_price = pair.price
 
-        logger.info(self)
         self.closed_at = datetime.now()
 
         if self.side == 'buy':

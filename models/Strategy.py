@@ -1,7 +1,5 @@
 from datetime import datetime
 
-from utils.constants import TIMER_TRIGGER
-
 
 class Strategy:
     def __init__(self, account, defaults, strategy):
@@ -29,9 +27,13 @@ class Strategy:
         self.take_profit = strategy['take_profit'] \
             if 'take_profit' in strategy.keys() \
             else defaults['take_profit']
+        self.TIMER_TRIGGER = strategy['timer_trigger'] \
+            if 'timer_trigger' in strategy.keys() \
+            else defaults['timer_trigger']
 
         # TODO: think of a better alternative than a name (e.g. dump strategy attributes)
-        self.name = f'{self.RSI_MIN}-{self.RSI_MAX}_SL-{(self.stop_loss*100):g}_TP-{(self.take_profit*100):g}'
+        self.name = f'{self.RSI_MIN}-{self.RSI_MAX}_SL-{(self.stop_loss*100):g}_TP-{(self.take_profit*100):g}' \
+            f'_{self.TIMER_TRIGGER}'
         self.name += '_profit' if self.profit_close else ''
 
         if self.real:
@@ -53,6 +55,7 @@ class Strategy:
             and self.risk == other.risk \
             and self.stop_loss == other.stop_loss \
             and self.take_profit == other.take_profit \
+            and self.TIMER_TRIGGER == other.TIMER_TRIGGER \
 
     def __str__(self):
         return self.name + '\n' \
@@ -61,10 +64,11 @@ class Strategy:
             f'\tMACRO_RSI_MIN = {self.MACRO_RSI_MIN}\n' \
             f'\tMACRO_RSI_MAX = {self.MACRO_RSI_MAX}\n' \
             f'\tprofit_close = {self.profit_close}\n' \
-            f'\treal         = {self.real}\n' \
-            f'\trisk         = {self.risk}\n' \
-            f'\tstop_loss    = {self.stop_loss}\n' \
-            f'\ttake_profit  = {self.take_profit}\n'
+            f'\treal = {self.real}\n' \
+            f'\trisk = {self.risk}\n' \
+            f'\tstop_loss   = {self.stop_loss}\n' \
+            f'\ttake_profit = {self.take_profit}\n' \
+            f'\tTIMER_TRIGGER = {self.TIMER_TRIGGER}\n'
 
     def determine_position_cost(self):
         """Calculate the position size according to account and strategy parameters."""
@@ -98,7 +102,7 @@ class Strategy:
 
         # Calculate the position's duration in minutes
         position_duration = (datetime.now() - position.opened_at).seconds / 60
-        timer_hit = True if position_duration >= TIMER_TRIGGER else False
+        timer_hit = True if position_duration >= self.TIMER_TRIGGER else False
 
         return (
             price_signal_hit or stop_loss_hit or take_profit_hit or timer_hit,

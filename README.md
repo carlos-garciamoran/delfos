@@ -21,15 +21,16 @@
 
 ## Strategy
 **Required default parameters**
-- `account_size` | *float*: initial account size in USDT
-- `profit_close` | *boolean*: close position when `price >= entry_price` **and** RSI has reversed
-- `real` | *boolean*: if the account should use real Binance USDⓈ-M balance
-- `risk` | *boolean*: risk taken per trade (e.g. 0.01 = 1% of account)
-- `stop_loss` | *float*: distance from entry price (e.g. 0.025 = 2.5% away)
-- `take_profit` | *float*: idem
+- `account_size (float)` | initial account size in USDT
+- `profit_close (bool)` | close position when `price >= entry_price` **and** RSI has reversed
+- `real (bool)` | if the account should use real Binance USDⓈ-M balance
+- `risk (bool)` | risk taken per trade (e.g. 0.01 = 1% of account)
+- `stop_loss (float)` | distance from entry price (e.g. 0.025 = 2.5% away)
+- `take_profit (float)` | idem
+- `timer_trigger (int)` | maximum time to keep a position open (minutes)
 
 **Required attributes per-strategy**
-- `RSI` | *array[int]*: RSI min and max triggers (e.g. `[30, 70]`, `[20, 80]`)
+- `RSI (list[int])` | RSI min and max triggers (e.g. `[30, 70]`, `[20, 80]`)
 
 **TODO**
 - Higher timeframes

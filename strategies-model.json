@@ -5,7 +5,8 @@
         "profit_close": false,
         "risk": 0.01,
         "stop_loss": 0.03,
-        "take_profit": 0.02
+        "take_profit": 0.02,
+        "timer_trigger": 60
     },
 
     "strategies": [
