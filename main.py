@@ -20,7 +20,7 @@ from utils.constants import INTERVAL
 accounts, strategies, symbols = [], [], []
 trader, exchange = None, None
 
-macro_RSI = 0.0
+macro_RSI = 0.0  # NOTE: 
 
 emojis = {
     True:  '💎', False:  '❌',
@@ -70,6 +70,8 @@ def main():
                 if exchange is not None:
                     trader.close_all_positions()
 
+                # TODO: iterate through accounts, close positions and call account.log_closed_position()
+
                 logger.info('Exited gracefully.')
                 return
 
@@ -92,10 +94,10 @@ def setup_accounts_and_strategies():
 
             account.strategy = strategy
             account.free_trading_slots = math.floor(
-                account.available * strategy.stop_loss * strategy.risk * 100
+                account.available * strategy.STOP_LOSS * strategy.RISK * 100
             )
 
-            if strategy.real:
+            if strategy.REAL:
                 exchange = trader.exchange
                 trader.setup_real_account(account)
 
@@ -156,7 +158,8 @@ def trade(pairs):
         # Finally, open the interesting positions
         open_new_positions(strategy, opened_positions)
 
-        account.log_positions_to_json()  # Dump open positions to opened.json
+        # Dump open positions to opened.json
+        account.log_open_positions()
 
         # All potential positions have been opened so reset the array for the next round
         account.potential = []
@@ -192,7 +195,7 @@ def close_if_needed(position, pair, strategy):
             return
 
         # HACK: for real accounts, could use balance from fetch_balance()
-        account.log_closed_order(position)
+        account.log_closed_position(position)
 
         # Optimization happening here, baby ;)
         msg = '\n' \
@@ -230,8 +233,6 @@ def close_if_needed(position, pair, strategy):
             f'     💰 Total account: ${total:.4f}\t 💵 Allocated capital: ${account.allocated:.4f}\n'
         )
 
-        account.log_positions_to_json(position)
-
 
 def open_new_positions(strategy, opened_positions):
     """Open positions based on RSI strength. Ensure no more than 1 position per symbol is opened."""
@@ -246,7 +247,7 @@ def open_new_positions(strategy, opened_positions):
         # HACK: for real accounts, calculate using free balance from Binance
         cost = strategy.determine_position_cost() / 10  # divide by 10 for testing purposes
 
-        # This check is needed in the edge case of `strategy.risk > strategy.stop_loss`
+        # This check is needed in the edge case of `strategy.RISK > strategy.STOP_LOSS`
         if cost <= account.available and account.free_trading_slots >= 1:
             # By this point there is a price signal due to pair.is_interesting()
             side = pair.determine_position_side(macro_RSI, strategy)
@@ -276,7 +277,7 @@ def open_new_positions(strategy, opened_positions):
                 continue
             # NOTE: catch -4003 error (quantity less than zero)
             # HACK: instead of catching the error, before opening the order, check
-            #       `tentative_size <= strategy.markets['limits']['amount']['min']` is True
+            #       `tentative_size <= strategy.exchange.markets['limits']['amount']['min']` is True
             except ccxt.ExchangeError as e:
                 logger.error(f'Caught {e}')
                 logger.error(
@@ -294,14 +295,14 @@ def open_new_positions(strategy, opened_positions):
                 continue
 
             logger.info(position)
-            account.log_new_order(position)
+            account.log_new_position(position)
 
-            msg += f'🧭 Tactic: {position.entry_trigger}\n' \
+            msg += f'\n{"":<4} 🧭 Tactic: {position.entry_trigger}\n' \
                 f'{emojis[side]:>6} {pair.symbol} {side} at {position.entry_price} with ${position.cost:.4f}\n' \
                 f'{"":>4} 🚫 SL: {position.stop_loss:.4f}\t\t 🤝 TP: {position.take_profit:.4f}\n'
 
     # Only log when msg has been appended some content
-    if len(msg) > 55:
+    if len(msg) > 60:
         msg += '\n' + \
             f'     💰 Available capital: ${account.available:.4f}\n' \
             f'     💵 Allocated capital: ${account.allocated:.4f}\n'

@@ -16,7 +16,7 @@ class Account:
         self.potential = []  # positions to be opened
 
         self.fees = 0.0  # total trading fees incurred by the account
-        self.pnl = 0.0   # total realized and recompounded profit & loss in USDT
+        self.pnl = 0.0   # total realized and recompounded net profit & loss in USDT
         self.loses = 0   # counter of unprofitable trades
         self.wins = 0    # counter of profitable trades
 
@@ -43,7 +43,7 @@ class Account:
             f'\tpnl          = {self.pnl:4f}\n' \
             f'\twins, loses  = {self.wins}, {self.loses}\n'
 
-    def log_new_order(self, position):
+    def log_new_position(self, position):
         """Add the position to its array and update the appropriate counters."""
         self.positions.append(position)
 
@@ -51,10 +51,10 @@ class Account:
         self.available -= position.cost
 
         self.free_trading_slots = math.floor(
-            self.available * self.strategy.stop_loss * self.strategy.risk * 100
+            self.available * self.strategy.STOP_LOSS * self.strategy.RISK * 100
         )
 
-    def log_closed_order(self, position):
+    def log_closed_position(self, position):
         """Remove the position from its array and update the appropriate counters."""
         self.positions.remove(position)
 
@@ -71,21 +71,19 @@ class Account:
         self.pnl += position.net_pnl
 
         self.free_trading_slots = math.floor(
-            self.available * self.strategy.stop_loss * self.strategy.risk * 100
+            self.available * self.strategy.STOP_LOSS * self.strategy.RISK * 100
         )
 
-    def log_positions_to_json(self, position=None):
-        """Append the last closed position to closed.json or dump open positions to opened.json."""
-        if position:
-            with open(self.strategy.name + '__closed.json', 'r+') as fd:
-                data = fd.read()
-                closed = json.loads(data) + [position.__dict__]
-                fd.seek(0)
-                fd.write(json.dumps(closed, indent=4, default=str) + '\n')
-                fd.truncate()
+        # Append the last closed position to closed.json.
+        with open(self.strategy.name + '__closed.json', 'r+') as fd:
+            data = fd.read()
+            closed = json.loads(data) + [position.__dict__]
+            fd.seek(0)
+            fd.write(json.dumps(closed, indent=4, default=str) + '\n')
+            fd.truncate()
 
-            return
-
+    def log_open_positions(self):
+        """Dump open positions to opened.json."""
         raw_positions = []
         for pos in self.positions:
             raw_positions.append(pos.__dict__)

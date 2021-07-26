@@ -23,7 +23,7 @@ class Pair:
             self.strength = abs(macro_RSI - self.RSI) + 50
             return True
 
-        if self.RSI >= strategy.RSI_MAX or self.RSI <= strategy.RSI_MIN:
+        if self.RSI >= strategy.OPEN_RSI_MAX or self.RSI <= strategy.OPEN_RSI_MIN:
             self.tactic = 'reversal'
             self.strength = abs(50 - self.RSI)
             return True

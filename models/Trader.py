@@ -38,7 +38,7 @@ class Trader:
         answer = input()
         if answer == 'y' or answer == 'Y':
             logger.debug('Adjusting margins and leverage...')
-            self.exchange.set_margins_and_leverage()
+            self.set_margins_and_leverage()
 
         # NOTE: `close_all_positions` does not ensure no positions are left open
         logger.debug('Fetching and closing open positions before launching...')

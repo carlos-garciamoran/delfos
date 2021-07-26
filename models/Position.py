@@ -12,7 +12,7 @@ class Position:
         self.entry_RSI = pair.RSI         # for post-analysis purposes
         self.entry_trigger = pair.tactic  # 'trend', 'reversal'
 
-        if strategy.real:
+        if strategy.REAL:
             self.create_orders(pair, side, cost, strategy)
         else:
             self.opened_at = datetime.now()
@@ -70,37 +70,38 @@ class Position:
         self.set_SL_and_TP(strategy)  # NOTE: called here due to dependence on self.entry_price
         inverted_side = 'sell' if side == 'buy' else 'buy'
 
+        logger.info('Creating and dumping SL and TP...')
+
         # Create orders with the returned base size
         sl_order = strategy.exchange.create_order(
             self.symbol, 'STOP_MARKET', inverted_side, self.size, None, {'stopPrice': self.stop_loss}
         )
-        logger.info('Dumping created SL...')
-        logger.info(sl_order)
 
         self.sl_id = sl_order['id']
         self.stop_loss = sl_order['stopPrice']
 
+        logger.info(sl_order)
+
         tp_order = strategy.exchange.create_order(
             self.symbol, 'TAKE_PROFIT_MARKET', inverted_side, self.size, None, {'stopPrice': self.take_profit}
         )
-        logger.info('Dumping created TP...')
-        logger.info(tp_order)
         self.tp_id = tp_order['id']
         self.take_profit = tp_order['stopPrice']
+
+        logger.info(tp_order)
 
     def set_SL_and_TP(self, strategy):
         """Calculates and sets stop loss and take profit prices."""
         if self.side == 'buy':
-            self.stop_loss = self.entry_price - (self.entry_price * strategy.stop_loss)
-            self.take_profit = self.entry_price + (self.entry_price * strategy.take_profit)
+            self.stop_loss = self.entry_price - (self.entry_price * strategy.STOP_LOSS)
+            self.take_profit = self.entry_price + (self.entry_price * strategy.TAKE_PROFIT)
         else:
-            self.stop_loss = self.entry_price + (self.entry_price * strategy.stop_loss)
-            self.take_profit = self.entry_price - (self.entry_price * strategy.take_profit)
+            self.stop_loss = self.entry_price + (self.entry_price * strategy.STOP_LOSS)
+            self.take_profit = self.entry_price - (self.entry_price * strategy.TAKE_PROFIT)
 
     def close(self, pair, strategy, causes, macro_RSI):
         """Mark the position as closed at the given exit_price and calculate P&L and fees."""
-        self.exit_macro = macro_RSI
-        self.exit_RSI = pair.RSI
+        self.exit_macro, self.exit_RSI = macro_RSI, pair.RSI
 
         if causes[0]:
             self.exit_trigger = 'tactic'
@@ -111,30 +112,32 @@ class Position:
         elif causes[3]:
             self.exit_trigger = 'timer'
 
-        if strategy.real:
+        if strategy.REAL:
             # Close all symbol orders (i.e. TP & SL) with a single call (weight = 1)
             strategy.exchange.fapiPrivate_delete_allopenorders({
                 'symbol': self.symbol.replace('/', '')
             })
 
             # Order may have already been closed by exchange due to TP or SL being hit
-            if not (causes[1] or causes[2]):
-                # Neither SL or TP have been hit, then create a market order for closing the position
+            if causes[1] or causes[2]:
+                cause = 'SL' if causes[1] else 'TP'
+                logger.info(f'{cause} hit, dumping order...')
+
+                # NOTE: this assumes order['status'] == 'FILLED'
+                # Retrieve closing price from SL or TP to log exit price precisely (weight = 1)
+                order = strategy.exchange.fetch_order(
+                    self.sl_id if causes[1] else self.tp_id,
+                    self.symbol
+                )
+            # SL/TP haven't been hit: create market order for closing position
+            else:
+                logger.info('Closed position, dumping order...')
                 inverted_side = 'sell' if self.side == 'buy' else 'buy'
 
                 # Close the order manually (weight = 1)
                 order = strategy.exchange.create_order(
                     self.symbol, 'MARKET', inverted_side, self.size
                 )
-                logger.info('Closed position, dumping order...')
-            else:
-                # NOTE: this assumes order['status'] == 'FILLED'
-                # Retrieve closing price from SL or TP to log exit price precisely (weight = 1)
-                order = strategy.exchange.fetch_order(
-                    self.sl_id if causes[0] else self.tp_id,
-                    self.symbol
-                )
-                logger.info('SL/TP hit, dumping order...')
 
             logger.info(order)
 
@@ -157,7 +160,7 @@ class Position:
 
         # HACK: create a function for calculating P&L + call it inside both if and else
         # Ugly & wet but needed; P&L needs to be calculated after the exit price
-        if not strategy.real:
+        if not strategy.REAL:
             # P&L has to be included because cost is the entry one so P&L is NOT included
             self.fee += (self.cost + self.net_pnl) * 0.00036
 

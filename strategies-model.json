@@ -1,7 +1,9 @@
 {
     "defaults": {
         "account_size": 1000.0,
-        "macro_RSI": [30, 70],
+        "macro_RSIs": [30, 70],
+        "open_RSIs": [30, 70],
+        "close_RSIs": [70, 30],
         "profit_close": false,
         "risk": 0.01,
         "stop_loss": 0.03,
@@ -11,16 +13,12 @@
 
     "strategies": [
         {
-            "RSI": [30, 70],
-            "take_profit": 0.01,
-            "REAL": true
-        },
-        {
-            "RSI": [30, 70],
+            "REAL": true,
             "profit_close": true
         },
         {
-            "RSI": [40, 60],
+            "open_RSIs": [40, 60],
+            "close_RSIs": [50, 50],
             "stop_loss": 0.028,
             "take_profit": 0.015
         }
