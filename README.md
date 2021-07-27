@@ -1,27 +1,36 @@
 # delfos 🔮 | Cryptocurrency Trading Bot
 
 ## Features
+
 - Leverages Binance USDⓈ-M Futures API 🔌
 - Scans last 499 candles of 4 pairs in 1 second ⏱
 - Trades multiple strategies with dedicated accounts 💰
-- Opens positions based on most interesting macro-RSI and pair's RSI 💡
 - Manages risk ⛔️
-    - Calculates position size based on strategy risk and SL
-    - Sets and manages SL & TP
+  - Calculates position size based on free capital, risk, and SL
+  - Sets and manages SL & TP
+- Opens positions based on 💡
+  - macro-RSI triggers (trend)
+  - most extreme pair's RSI (reversal)
 - Closes positions based on 📊
-    - RSI reverse
-    - macro-RSI (average RSI of the market)
-    - stop-loss
-    - take-profit
+  - RSI reverse
+  - macro-RSI (average RSI of the market)
+  - stop-loss
+  - take-profit
+  - timer
 - Tracks account balance, P&L, fees, wins/loses, etc. 📐
 - Logs 💾
-    - currently open and closed positions in JSON
-    - price-data (symbol, price, and strength) in CSV
-    - macro-RSI in CSV
+  - currently open and closed positions in JSON
+  - price data (symbol, price, and RSI) in CSV
+  - macro-RSI in CSV
 
 ## Strategy
-**Required default parameters**
-- `account_size (float)` | initial account size in USDT
+
+### Required parameters
+
+- `account_size (float)` | initial account size in USDT for non-real accounts
+- `macro_RSIs (list[int])` | macro RSI min and max triggers (e.g. `[30, 70]`)
+- `open_RSIs (list[int])` | open RSI min and max triggers (e.g. `[40, 60]`)
+- `close_RSIs (list[int])` | close RSI max and min triggers (e.g. `[50, 50]`)
 - `profit_close (bool)` | close position when `price >= entry_price` **and** RSI has reversed
 - `real (bool)` | if the account should use real Binance USDⓈ-M balance
 - `risk (bool)` | risk taken per trade (e.g. 0.01 = 1% of account)
@@ -29,17 +38,18 @@
 - `take_profit (float)` | idem
 - `timer_trigger (int)` | maximum time to keep a position open (minutes)
 
-**Required attributes per-strategy**
-- `RSI (list[int])` | RSI min and max triggers (e.g. `[30, 70]`, `[20, 80]`)
+### TODO
 
-**TODO**
 - Higher timeframes
+- Momentum
 - Volume
 - RSI divergences
 - Heikin-Ashi candles
-- Momentum
 
 ## Setup
-- rename `.env.example` to `.env`
-- rename `constants-model.py` to `constants.py`
-- rename `strategies-model.json` to `strategies.json`
+
+```bash
+mv .env.example .env
+mv strategies-model.json strategies.json
+mv utils/constants-model.py utils/constants.py
+```

@@ -8,7 +8,7 @@ class Strategy:
         self.OPEN_RSI_MIN, self.OPEN_RSI_MAX = strategy['open_RSIs'] \
             if 'open_RSIs' in parameters \
             else defaults['open_RSIs']
-        self.CLOSE_RSI_MIN, self.CLOSE_RSI_MAX = strategy['close_RSIs'] \
+        self.CLOSE_RSI_MAX, self.CLOSE_RSI_MIN = strategy['close_RSIs'] \
             if 'close_RSIs' in parameters \
             else defaults['close_RSIs']
         self.MACRO_RSI_MIN, self.MACRO_RSI_MAX = strategy['macro_RSIs'] \
@@ -49,8 +49,7 @@ class Strategy:
 
     def __eq__(self, other):
         # NOTE: `self.account` is not compared on purpose
-        return self.name == other.name \
-            and self.OPEN_RSI_MIN == other.OPEN_RSI_MIN \
+        return self.OPEN_RSI_MIN == other.OPEN_RSI_MIN \
             and self.OPEN_RSI_MAX == other.OPEN_RSI_MAX \
             and self.CLOSE_RSI_MIN == other.CLOSE_RSI_MIN \
             and self.CLOSE_RSI_MAX == other.CLOSE_RSI_MAX \
@@ -72,47 +71,61 @@ class Strategy:
             f'\tMACRO_RSI_MIN = {self.MACRO_RSI_MIN}\n' \
             f'\tMACRO_RSI_MAX = {self.MACRO_RSI_MAX}\n' \
             f'\tPROFIT_CLOSE  = {self.PROFIT_CLOSE}\n' \
-            f'\tREAL = {self.REAL}\n' \
-            f'\tRISK = {self.RISK}\n' \
+            f'\tREAL          = {self.REAL}\n' \
+            f'\tRISK          = {self.RISK}\n' \
             f'\tSTOP_LOSS     = {self.STOP_LOSS}\n' \
             f'\tTAKE_PROFIT   = {self.TAKE_PROFIT}\n' \
             f'\tTIMER_TRIGGER = {self.TIMER_TRIGGER}\n'
 
     def determine_position_cost(self):
         """Calculate the position size according to account and strategy parameters."""
+        # HACK: for real accounts, calculate using free balance from Binance
         return (self.account.allocated + self.account.available) * self.RISK / self.STOP_LOSS
 
     def should_close(self, position, pair, macro_RSI):
         """Return if the position should be closed according to tactic, SL, TP, and position timer."""
         if position.side == 'buy':
-            if position.entry_trigger == 'trend':
-                price_signal_hit = True if macro_RSI < self.MACRO_RSI_MAX else False
+            # NOTE: may want to exit with more margin (e.g. self.MACRO_RSI_MAX - 10)
+            if position.entry_trigger == 'trend' and macro_RSI < self.MACRO_RSI_MAX:
+                return True, 'trend-tactic'
             else:
-                price_signal_hit = pair.RSI >= self.CLOSE_RSI_MAX
+                # Reversal has failed (BUY in bearish market)
+                if macro_RSI <= self.MACRO_RSI_MIN:
+                    return True, 'macro-opposed'
 
-                # NOTE: consider using PROFIT_CLOSE in both 'trend' and 'reversal'
-                if self.PROFIT_CLOSE and price_signal_hit:
-                    price_signal_hit = pair.price >= position.entry_price
+                # Reversal has completed
+                if pair.RSI >= self.CLOSE_RSI_MAX:
+                    # NOTE: consider using PROFIT_CLOSE in both 'trend' and 'reversal'
+                    if not self.PROFIT_CLOSE or (self.PROFIT_CLOSE and pair.price >= position.entry_price):
+                        return True, 'reversal-tactic'
 
-            stop_loss_hit = pair.price <= position.stop_loss
-            take_profit_hit = pair.price >= position.take_profit
+            if pair.price <= position.stop_loss:
+                return True, 'SL'
+
+            if pair.price >= position.take_profit:
+                return True, 'TP'
         else:
-            if position.entry_trigger == 'trend':
-                price_signal_hit = True if macro_RSI > self.MACRO_RSI_MIN else False
+            if position.entry_trigger == 'trend' and macro_RSI > self.MACRO_RSI_MIN:
+                return True, 'trend-tactic'
             else:
-                price_signal_hit = pair.RSI <= self.CLOSE_RSI_MIN
+                # Reversal has failed (SELL in bullish market)
+                if macro_RSI >= self.MACRO_RSI_MAX:
+                    return True, 'macro-opposed'
 
-                if self.PROFIT_CLOSE and price_signal_hit:
-                    price_signal_hit = pair.price <= position.entry_price
+                # Reversal has completed
+                if pair.RSI <= self.CLOSE_RSI_MIN:
+                    if not self.PROFIT_CLOSE or (self.PROFIT_CLOSE and pair.price <= position.entry_price):
+                        return True, 'reversal-tactic'
 
-            stop_loss_hit = pair.price >= position.stop_loss
-            take_profit_hit = pair.price <= position.take_profit
+            if pair.price >= position.stop_loss:
+                return True, 'SL'
+
+            if pair.price <= position.take_profit:
+                return True, 'TP'
 
         # Calculate the position's duration in minutes
         position_duration = (datetime.now() - position.opened_at).seconds / 60
-        timer_hit = True if position_duration >= self.TIMER_TRIGGER else False
+        if position_duration >= self.TIMER_TRIGGER:
+            return True, 'timer'
 
-        return (
-            price_signal_hit or stop_loss_hit or take_profit_hit or timer_hit,
-            [price_signal_hit, stop_loss_hit, take_profit_hit, timer_hit]
-        )
+        return False, None

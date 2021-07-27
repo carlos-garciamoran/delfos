@@ -34,7 +34,7 @@ class Trader:
 
     def setup_real_account(self, account):
         """Reset margins if wanted, close open positions and set account balance."""
-        logger.warning('Found real strategy; reset margin and leverage? Takes about 2 minutes... (y/N) ', end='')
+        logger.warning('⚠️  Found REAL strategy; reset margin & leverage? Takes about 2 minutes (y/N) ', end='')
         answer = input()
         if answer == 'y' or answer == 'Y':
             logger.debug('Adjusting margins and leverage...')

@@ -33,14 +33,14 @@ def main():
     global macro_RSI, symbols
     global trader   # split because it's G
 
-    logger.debug('Loading ccxt...')
+    logger.debug('🔌 Booting up ccxt...')
     trader = Trader()
 
     symbols = trader.symbols
-    logger.info(f'Loaded {len(symbols)} symbols')
+    logger.info(f'🪙  Loaded {len(symbols)} symbols')
 
     setup_accounts_and_strategies()
-    logger.info(f'Loaded {len(strategies)} strategies')
+    logger.info(f'💡 Loaded {len(strategies)} strategies')
 
     while True:
         try:
@@ -58,7 +58,7 @@ def main():
                 logger.critical(HTTP_error[1])
                 return
 
-            logger.info(f'🎛  Macro-RSI: {macro_RSI:.2f}')
+            logger.debug(f'🎛  Macro-RSI: {macro_RSI:.2f}')
 
             trade(pairs)
         except KeyboardInterrupt:
@@ -132,13 +132,19 @@ def trade(pairs):
 
         logger.debug(f'🔍 Checking {len(opened_positions)} positions for {strategy.name}...')
 
+        for pos in list(opened_positions):
+            logger.debug(opened_positions[pos])
+
         # First, close all necessary positions for the given strategy
         for pair in pairs:
             if pair.symbol in opened_positions:
                 position = opened_positions[pair.symbol]
 
                 # HACK: move function to a Position method(?)
-                close_if_needed(position, pair, strategy)
+                needs_to_close, trigger = strategy.should_close(position, pair, macro_RSI)
+
+                if needs_to_close:
+                    close_position(position, pair, strategy, trigger)
 
                 if pair.symbol not in logged_pairs:
                     with open('price-history.csv', 'a') as fd:
@@ -153,7 +159,7 @@ def trade(pairs):
         # Then, sort potential pairs so most extreme RSIs get priority (i.e. positions are opened first)
         account.potential.sort(key=lambda p: p.strength, reverse=True)
 
-        logger.info(f'🔎 Got {len(account.potential)} potential positions...')
+        logger.debug(f'🔎 Got {len(account.potential)} potential positions...')
 
         # Finally, open the interesting positions
         open_new_positions(strategy, opened_positions)
@@ -165,73 +171,85 @@ def trade(pairs):
         account.potential = []
 
 
-def close_if_needed(position, pair, strategy):
-    """Given a pair, close its position if its SL, TP, or a price signal has been hit."""
+def close_position(position, pair, strategy, trigger):
+    """Wrapper for closing positions."""
     account = strategy.account
 
-    needs_to_close, causes = strategy.should_close(position, pair, macro_RSI)
-
-    if needs_to_close:
-        # NOTE: cath -2019 error (margin is insufficient)
-        try:
-            position.close(pair, strategy, causes, macro_RSI)
-        # TODO: determine what to do with this error
-        except ccxt.InsufficientFunds as e:
-            # TODO: retrieve balance
-            logger.error('InsufficientFunds: failed closing ' \
-                f'{position.side} {pair.symbol} with ${position.cost:.4f} ({e})'
-            )
-            logger.info(account)
-            logger.info(strategy.exchange.fetch_balance()['USDT'])
-
-            return
-        # TODO: determine what to do with this error
-        except ccxt.NetworkError as e:
-            logger.error('NetworkError: failed closing ' \
-                f'{position.side} {pair.symbol} with ${position.cost:.4f} ({e})'
-            )
-            logger.info(account)
-
-            return
-
-        # HACK: for real accounts, could use balance from fetch_balance()
-        account.log_closed_position(position)
-
-        # Optimization happening here, baby ;)
-        msg = '\n' \
-            f'     🔮 Strategy: {strategy.name} | 🧭 Tactic: {pair.tactic}\n' \
-            f'     {emojis[position.net_pnl >= 0]} Closed {position.symbol} {position.side} at {position.exit_price}\n' \
-            f'     💸 P&L: {position.pnl:.2f}%, ${position.net_pnl:.4f}\n' \
-            f'     🧨 Fee: ${position.fee:.4f}\n' \
-            '     '
-
-        if causes[0]:
-            msg += '📞 Price signal hit\n'
-
-            with open('macro-close.csv', 'a') as fd:
-                fd.write(f'{str(position.__dict__)},{str(pair.__dict__)},{macro_RSI:.2f}\n')
-        elif causes[1]:
-            msg += '⛔️ SL hit\n'
-        elif causes[2]:
-            msg += '🤝 TP hit\n'
-        elif causes[3]:
-            msg += '⏱ Timer hit\n'
-
-        logger.warning(msg)
-
-        # Percentage increase = (final_value - starting_value) / starting_value * 100
-        percentage = (
-            account.available + account.allocated - account.INITIAL_SIZE
-            ) / account.INITIAL_SIZE * 100
-
-        # No need to substract fees since P&L factored is already net
-        total = account.available + account.allocated
-
-        logger.info('\n'
-            f'     💸 Total realized P&L: {percentage:.2f}%, ${account.pnl:.4f}\n'
-            f'     🤑 Wins: {account.wins}\t\t 🤔 Loses: {account.loses}\n'
-            f'     💰 Total account: ${total:.4f}\t 💵 Allocated capital: ${account.allocated:.4f}\n'
+    try:
+        position.close(pair, strategy, trigger, macro_RSI)
+    # NOTE: catch -2019 error (margin is insufficient)
+    except ccxt.InsufficientFunds as e:
+        # TODO: retrieve balance
+        logger.critical('InsufficientFunds: failed closing ' \
+            f'{position.side} {pair.symbol} with ${position.cost:.4f} ({e})'
         )
+        balance = strategy.exchange.fetch_balance()['USDT']
+        logger.info(balance)
+
+        logger.info(account)
+        account.allocated, account.available = balance['used'], balance['free']
+        logger.info(account)
+
+        return
+    except ccxt.NetworkError as e:
+        logger.error('NetworkError: failed closing ' \
+            f'{position.side} {pair.symbol} with ${position.cost:.4f} ({e})'
+        )
+
+        # Try closing the position it again
+        close_position(position, pair, strategy, trigger)
+
+    # HACK: for real accounts, could use balance from fetch_balance()
+    account.log_closed_position(position)
+
+    # Optimization happening here, baby ;)
+    msg = '\n' \
+        f'     🔮 Strategy: {strategy.name}\n' \
+        f'     🧭 Tactic: {position.entry_trigger}\n' \
+        f'     {emojis[position.net_pnl >= 0]} Closed {position.symbol} {position.side} at {position.exit_price}\n' \
+        f'     💸 P&L: {position.pnl:.2f}%, ${position.net_pnl:.4f}\n' \
+        f'     🧨 Fee: ${position.fee:.4f}\n' \
+        '     '
+
+    if trigger == 'trend-tactic':
+        position.exit_trigger = 'trend-tactic'
+        msg += '🎛  Price signal hit\n'
+
+        with open('macro-close.csv', 'a') as fd:
+            fd.write(f'{str(position.__dict__)},{str(pair.__dict__)},{macro_RSI:.2f}\n')
+    elif trigger == 'reversal-tactic':
+        position.exit_trigger = 'reversal-tactic'
+        msg += '📞 Price signal hit\n'
+    elif trigger == 'macro-opposed':
+        msg += '❌ Macro early-close\n'
+
+        with open('macro-close.csv', 'a') as fd:
+            fd.write(f'{str(position.__dict__)},{str(pair.__dict__)},{macro_RSI:.2f}\n')
+    elif trigger == 'SL':
+        position.exit_trigger = 'SL'
+        msg += '⛔️ SL hit\n'
+    elif trigger == 'TP':
+        position.exit_trigger = 'TP'
+        msg += '🤝 TP hit\n'
+    elif trigger == 'timer':
+        position.exit_trigger = 'timer'
+        msg += '⏱ Timer hit\n'
+
+    logger.warning(msg)
+
+    # Percentage increase = (final_value - starting_value) / starting_value * 100
+    percentage = (
+        account.available + account.allocated - account.INITIAL_SIZE
+        ) / account.INITIAL_SIZE * 100
+
+    # No need to substract fees since P&L factored is already net
+    total = account.available + account.allocated
+
+    logger.info('\n'
+        f'     💸 Account P&L: {percentage:.2f}%, ${account.pnl:.4f}\n'
+        f'     🤑 Wins: {account.wins}\t\t\t 🤔 Loses: {account.loses}\n'
+        f'     💰 Total account: ${total:.4f}\t 💵 Allocated capital: ${account.allocated:.4f}\n'
+    )
 
 
 def open_new_positions(strategy, opened_positions):
@@ -271,21 +289,22 @@ def open_new_positions(strategy, opened_positions):
                 )
                 logger.info(account)
 
+                balance = strategy.exchange.fetch_balance()['USDT']
+                logger.info(balance)
+
+                # TODO: create function for opening position and call it again here: recursion!
                 # HACK: retrieve free USDT from Binance to open position accordingly
                 # For insufficient margin, try opening the position with smaller cost (-10%).
                 # position = Position(pair, side, cost - (cost*.1), strategy)
                 continue
             # NOTE: catch -4003 error (quantity less than zero)
-            # HACK: instead of catching the error, before opening the order, check
-            #       `tentative_size <= strategy.exchange.markets['limits']['amount']['min']` is True
+            # HACK: check `tentative_size <= exchange.markets['limits']['amount']['min']` before creating order
             except ccxt.ExchangeError as e:
-                logger.error(f'Caught {e}')
                 logger.error(
-                    f'Failed opening {side} {pair.symbol} with ${cost:.4f} ({cost / pair.price})'
+                    f'Failed opening {side} {pair.symbol} with ${cost:.4f} ({(cost / pair.price):.4f}): {e}'
                 )
 
                 continue
-            # TODO: determine what to do with this error
             except ccxt.NetworkError as e:
                 logger.error(
                     f'NetworkError: failed opening {side} {pair.symbol} with ${cost:.4f} ({e})'
@@ -294,15 +313,16 @@ def open_new_positions(strategy, opened_positions):
 
                 continue
 
+            # TODO: FIX REAL ORDERS NOT BEEN ADDED TO POSITIONS ARRAY
             logger.info(position)
             account.log_new_position(position)
 
-            msg += f'\n{"":<4} 🧭 Tactic: {position.entry_trigger}\n' \
-                f'{emojis[side]:>6} {pair.symbol} {side} at {position.entry_price} with ${position.cost:.4f}\n' \
-                f'{"":>4} 🚫 SL: {position.stop_loss:.4f}\t\t 🤝 TP: {position.take_profit:.4f}\n'
+            msg += f'\n{emojis[side]:>6} {pair.symbol} {side} at {position.entry_price} with ${position.cost:.4f}\n' \
+                f'     🚫 SL: {position.stop_loss:.4f}\t\t 🤝 TP: {position.take_profit:.4f}\n' \
+                f'     🧭 Tactic: {position.entry_trigger}\n'
 
     # Only log when msg has been appended some content
-    if len(msg) > 60:
+    if not msg.endswith(strategy.name):
         msg += '\n' + \
             f'     💰 Available capital: ${account.available:.4f}\n' \
             f'     💵 Allocated capital: ${account.allocated:.4f}\n'
@@ -336,11 +356,11 @@ if __name__ == '__main__':
 
     with open('price-history.csv', 'w') as fd1, open('macro-history.csv', 'w') as fd2:
         fd1.write('symbol,price,RSI,timestamp\n')
-        fd2.write('RSI,timestamp\n')
+        fd2.write('macro_RSI,timestamp\n')
 
     # Use `debug()` for writing to STDOUT but NOT to logfile.
     logger.remove()
-    logger.add('tracking.log', level='INFO',
+    logger.add(f'{prefix}_tracking.log', level='INFO',
         format='{time:MM-DD HH:mm:ss.SSS} | {level} | {message}'
     )
     logger.add(sys.stdout, colorize=True, format=
