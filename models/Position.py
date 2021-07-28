@@ -59,7 +59,7 @@ class Position:
         order = strategy.exchange.create_order(
             pair.symbol, 'MARKET', side, tentative_size
         )
-        logger.info('Dumping created orders...')
+
         logger.info(order)
 
         self.opened_at = datetime.now()
@@ -114,7 +114,7 @@ class Position:
 
                 # Do not assume order['status'] == 'filled'
                 if order['amount'] != order['filled']:
-                    logger.critical('Order DID NOT FILL, trying to close manually...')
+                    logger.critical('Order did NOT FILL, trying to close manually...')
 
                     inverted_side = 'sell' if self.side == 'buy' else 'buy'
                     order = strategy.exchange.create_order(
@@ -134,8 +134,6 @@ class Position:
 
             self.exit_price = order['price']
             self.fee += order['cost'] * 0.00036  # the cost has the raw P&L included
-
-            logger.info(self)
         else:
             self.exit_price = pair.price
 

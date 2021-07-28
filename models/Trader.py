@@ -72,7 +72,7 @@ class Trader:
             lambda p: p['contracts'] != 0, self.exchange.fetchPositions()
         ))
 
-        logger.debug(f'Found {len(open_positions)} open positions.')
+        logger.debug(f'Found {len(open_positions)} open positions')
 
         if len(open_positions) > 0:
             for position in open_positions:

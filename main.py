@@ -20,8 +20,6 @@ from utils.constants import INTERVAL
 accounts, strategies, symbols = [], [], []
 trader, exchange = None, None
 
-macro_RSI = 0.0  # NOTE: 
-
 emojis = {
     True:  '💎', False:  '❌',
     'buy': '🐃', 'sell': '🐻',
@@ -130,10 +128,7 @@ def trade(pairs):
         for position in account.positions:
             opened_positions[position.symbol] = position
 
-        logger.debug(f'🔍 Checking {len(opened_positions)} positions for {strategy.name}...')
-
-        for pos in list(opened_positions):
-            logger.debug(opened_positions[pos])
+        logger.info(f'🔍 Checking {len(opened_positions)} positions for {strategy.name}...')
 
         # First, close all necessary positions for the given strategy
         for pair in pairs:
@@ -184,11 +179,10 @@ def close_position(position, pair, strategy, trigger):
             f'{position.side} {pair.symbol} with ${position.cost:.4f} ({e})'
         )
         balance = strategy.exchange.fetch_balance()['USDT']
-        logger.info(balance)
 
-        logger.info(account)
+        logger.warning(account)
         account.allocated, account.available = balance['used'], balance['free']
-        logger.info(account)
+        logger.warning(account)
 
         return
     except ccxt.NetworkError as e:
@@ -199,27 +193,27 @@ def close_position(position, pair, strategy, trigger):
         # Try closing the position it again
         close_position(position, pair, strategy, trigger)
 
-    # HACK: for real accounts, could use balance from fetch_balance()
     account.log_closed_position(position)
 
     # Optimization happening here, baby ;)
-    msg = '\n' \
-        f'     🔮 Strategy: {strategy.name}\n' \
-        f'     🧭 Tactic: {position.entry_trigger}\n' \
-        f'     {emojis[position.net_pnl >= 0]} Closed {position.symbol} {position.side} at {position.exit_price}\n' \
-        f'     💸 P&L: {position.pnl:.2f}%, ${position.net_pnl:.4f}\n' \
-        f'     🧨 Fee: ${position.fee:.4f}\n' \
+    msg = ('\n'
+        f'     🔮 Strategy: {strategy.name}\n'
+        f'     🧭 Tactic: {position.entry_trigger}\n'
+        f'     {emojis[position.net_pnl >= 0]} Closed {position.symbol} {position.side} at {position.exit_price}\n'
+        f'     💸 P&L: {position.pnl:.2f}%, ${position.net_pnl:.4f}\n'
+        f'     🧨 Fee: ${position.fee:.4f}\n'
         '     '
+    )
 
     if trigger == 'trend-tactic':
         position.exit_trigger = 'trend-tactic'
-        msg += '🎛  Price signal hit\n'
+        msg += '🎛 Trend signal hit\n'
 
         with open('macro-close.csv', 'a') as fd:
             fd.write(f'{str(position.__dict__)},{str(pair.__dict__)},{macro_RSI:.2f}\n')
     elif trigger == 'reversal-tactic':
         position.exit_trigger = 'reversal-tactic'
-        msg += '📞 Price signal hit\n'
+        msg += '📞 Reversal signal hit\n'
     elif trigger == 'macro-opposed':
         msg += '❌ Macro early-close\n'
 
@@ -245,10 +239,14 @@ def close_position(position, pair, strategy, trigger):
     # No need to substract fees since P&L factored is already net
     total = account.available + account.allocated
 
+    balance = strategy.exchange.fetch_balance()['USDT']
+
     logger.info('\n'
         f'     💸 Account P&L: {percentage:.2f}%, ${account.pnl:.4f}\n'
         f'     🤑 Wins: {account.wins}\t\t\t 🤔 Loses: {account.loses}\n'
-        f'     💰 Total account: ${total:.4f}\t 💵 Allocated capital: ${account.allocated:.4f}\n'
+        f'     💰 Available capital: ${account.available:.4f} ({balance["free"]})\n'
+        f'     💵 Allocated capital: ${account.allocated:.4f} ({balance["used"]})\n'
+        f'     💳 Total capital: ${total:.4f} ({balance["used"] + balance["free"]})\n'
     )
 
 
@@ -267,7 +265,6 @@ def open_new_positions(strategy, opened_positions):
 
         # This check is needed in the edge case of `strategy.RISK > strategy.STOP_LOSS`
         if cost <= account.available and account.free_trading_slots >= 1:
-            # By this point there is a price signal due to pair.is_interesting()
             side = pair.determine_position_side(macro_RSI, strategy)
 
             # HACK: move code away from this function. Simply check macro_RSI before including
@@ -279,7 +276,6 @@ def open_new_positions(strategy, opened_positions):
                 logger.info('⛔ Skipping false-flag (SELL in bullish market)')
                 continue
 
-            # TODO: improve this error handling logic
             try:
                 position = Position(pair, side, cost, strategy, macro_RSI)
             # NOTE: cath -2019 error (margin is insufficient)
@@ -287,13 +283,11 @@ def open_new_positions(strategy, opened_positions):
                 logger.error(
                     f'InsufficientFunds: failed opening {side} {pair.symbol} with ${cost:.4f}'
                 )
-                logger.info(account)
 
-                balance = strategy.exchange.fetch_balance()['USDT']
-                logger.info(balance)
+                logger.warning(account)
+                logger.warning(strategy.exchange.fetch_balance()['USDT'])
 
                 # TODO: create function for opening position and call it again here: recursion!
-                # HACK: retrieve free USDT from Binance to open position accordingly
                 # For insufficient margin, try opening the position with smaller cost (-10%).
                 # position = Position(pair, side, cost - (cost*.1), strategy)
                 continue
@@ -309,24 +303,29 @@ def open_new_positions(strategy, opened_positions):
                 logger.error(
                     f'NetworkError: failed opening {side} {pair.symbol} with ${cost:.4f} ({e})'
                 )
-                logger.info(account)
+                logger.error(account)
 
                 continue
 
-            # TODO: FIX REAL ORDERS NOT BEEN ADDED TO POSITIONS ARRAY
-            logger.info(position)
             account.log_new_position(position)
 
-            msg += f'\n{emojis[side]:>6} {pair.symbol} {side} at {position.entry_price} with ${position.cost:.4f}\n' \
-                f'     🚫 SL: {position.stop_loss:.4f}\t\t 🤝 TP: {position.take_profit:.4f}\n' \
+            # HACK: improve spacing: use :>x syntax
+            msg += (f'\n{emojis[side]:>6} {pair.symbol} {side} at {position.entry_price} with ${position.cost:.4f}\n'
+                f'     🚫 SL: {position.stop_loss:.4f}\t\t 🤝 TP: {position.take_profit:.4f}\n'
+                f'     📈 RSI: {position.entry_RSI:.2f}\t\t 🎛  Macro-RSI: {position.entry_macro_RSI:.2f}\n'
                 f'     🧭 Tactic: {position.entry_trigger}\n'
+            )
+
+    total = account.available + account.allocated
+    balance = strategy.exchange.fetch_balance()['USDT']
 
     # Only log when msg has been appended some content
-    if not msg.endswith(strategy.name):
-        msg += '\n' + \
-            f'     💰 Available capital: ${account.available:.4f}\n' \
-            f'     💵 Allocated capital: ${account.allocated:.4f}\n'
-        logger.warning(msg)
+    if msg.endswith('\n'):
+        logger.warning(msg + '\n'
+            f'     💰 Available capital: ${account.available:.4f} ({balance["free"]})\n'
+            f'     💵 Allocated capital: ${account.allocated:.4f} ({balance["used"]})\n'
+            f'     💳 Total capital: ${total:.4f} ({balance["used"] + balance["free"]})\n'
+        )
 
 
 if __name__ == '__main__':
