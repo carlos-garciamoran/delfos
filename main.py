@@ -193,8 +193,6 @@ def close_position(position, pair, strategy, trigger):
         # Try closing the position it again
         close_position(position, pair, strategy, trigger)
 
-    account.log_closed_position(position)
-
     # Optimization happening here, baby ;)
     msg = ('\n'
         f'     🔮 Strategy: {strategy.name}\n'
@@ -229,6 +227,8 @@ def close_position(position, pair, strategy, trigger):
         position.exit_trigger = 'timer'
         msg += '⏱ Timer hit\n'
 
+    account.log_closed_position(position)
+
     logger.warning(msg)
 
     # Percentage increase = (final_value - starting_value) / starting_value * 100
@@ -239,14 +239,18 @@ def close_position(position, pair, strategy, trigger):
     # No need to substract fees since P&L factored is already net
     total = account.available + account.allocated
 
-    balance = strategy.exchange.fetch_balance()['USDT']
+    # TODO: code properly (e.g. move to account.log_closed_position())
+    if strategy.REAL:
+        balance = strategy.exchange.fetch_balance()['USDT']
+    else:
+        balance = {'free': account.available, 'used': account.allocated}
 
     logger.info('\n'
         f'     💸 Account P&L: {percentage:.2f}%, ${account.pnl:.4f}\n'
         f'     🤑 Wins: {account.wins}\t\t\t 🤔 Loses: {account.loses}\n'
         f'     💰 Available capital: ${account.available:.4f} ({balance["free"]})\n'
         f'     💵 Allocated capital: ${account.allocated:.4f} ({balance["used"]})\n'
-        f'     💳 Total capital: ${total:.4f} ({balance["used"] + balance["free"]})\n'
+        f'     💳 Total     capital: ${total:.4f} ({balance["used"] + balance["free"]})\n'
     )
 
 
@@ -261,11 +265,16 @@ def open_new_positions(strategy, opened_positions):
             continue
 
         # HACK: for real accounts, calculate using free balance from Binance
-        cost = strategy.determine_position_cost() / 10  # divide by 10 for testing purposes
+        cost = strategy.determine_position_cost() / 5  # divide for testing purposes
 
         # This check is needed in the edge case of `strategy.RISK > strategy.STOP_LOSS`
         if cost <= account.available and account.free_trading_slots >= 1:
             side = pair.determine_position_side(macro_RSI, strategy)
+
+            if side == 'sell' and strategy.MODE == 'bullish' or \
+                side == 'buy' and strategy.MODE == 'bearish':
+                # Skip side conflicting with strategy
+                continue
 
             # HACK: move code away from this function. Simply check macro_RSI before including
             #       pair in `account.potential` at `trade()`. NOTE: need to know `side` in advance
@@ -317,7 +326,12 @@ def open_new_positions(strategy, opened_positions):
             )
 
     total = account.available + account.allocated
-    balance = strategy.exchange.fetch_balance()['USDT']
+
+    # TODO: code properly (e.g. move to account.log_closed_position())
+    if strategy.REAL:
+        balance = strategy.exchange.fetch_balance()['USDT']
+    else:
+        balance = {'free': account.available, 'used': account.allocated}
 
     # Only log when msg has been appended some content
     if msg.endswith('\n'):

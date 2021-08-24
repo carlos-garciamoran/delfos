@@ -14,7 +14,7 @@ s = Session()
 s.headers.update({ 'X-MBX-APIKEY': BINANCE_APIKEY })
 
 
-# NOTE: unused; TODO: parse used JSON objects
+# NOTE: unused
 def get_account_info():
     """Get current account information, including positions. Weight: 5"""
     endpoint = BASEURL + '/v2/account'
@@ -24,9 +24,9 @@ def get_account_info():
     return resp.json(), resp.status_code
 
 
-def get_close_candles(symbol, limit=499):
+def get_close_candles(symbol, limit=200):
     """
-    Get the last 499 kline/candlestick close values for a symbol.
+    Get the last {limit} kline/candlestick close values for a symbol's interval.
 
     Limit       Weight
     [1,100)     1
@@ -37,9 +37,8 @@ def get_close_candles(symbol, limit=499):
     closes = np.array([])
     endpoint = BASEURL + '/v1/klines'
 
-    # Get the last 499 candles to calculate a precise RSI & stay in weight 2
     resp = s.get(endpoint, params={
-        'symbol': symbol, 'interval': INTERVAL, 'limit': limit
+        'interval': INTERVAL, 'symbol': symbol, 'limit': limit
     })
 
     # Basic error checking
@@ -54,11 +53,9 @@ def get_close_candles(symbol, limit=499):
 
 def sign_timestamp():
     """Sign millisecond timestamp with HMAC256 signature using Binance API's secret key."""
-    # Convert UNIX time from seconds to milliseconds
-    params = { 'timestamp': int(time.time() * 1000) }
+    params = { 'timestamp': int(time.time() * 1000) }  # Convert UNIX time seconds to milliseconds
     payload = urllib.urlencode(params).encode()
 
-    signature = hmac.new(BINANCE_SECRETKEY, payload, 'SHA256').hexdigest()
-    params['signature'] = signature
+    params['signature'] = hmac.new(BINANCE_SECRETKEY.encode(), payload, 'SHA256').hexdigest()
 
     return params

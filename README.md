@@ -3,7 +3,7 @@
 ## Features
 
 - Leverages Binance USDⓈ-M Futures API 🔌
-- Scans last 499 candles of 4 pairs in 1 second ⏱
+- Scans last 200 candles of 4 pairs in 1 second ⏱
 - Trades multiple strategies with dedicated accounts 💰
 - Manages risk ⛔️
   - Calculates position size based on free capital, risk, and SL
@@ -31,16 +31,16 @@
 - `macro_RSIs (list[int])` | macro RSI min and max triggers (e.g. `[30, 70]`)
 - `open_RSIs (list[int])` | open RSI min and max triggers (e.g. `[40, 60]`)
 - `close_RSIs (list[int])` | close RSI max and min triggers (e.g. `[50, 50]`)
+- `mode (string)` | open positions **long**, **short**, or **both ways**; `[bullish, bearish, neutral]`
 - `profit_close (bool)` | close position when `price >= entry_price` **and** RSI has reversed
 - `real (bool)` | if the account should use real Binance USDⓈ-M balance
-- `risk (bool)` | risk taken per trade (e.g. 0.01 = 1% of account)
-- `stop_loss (float)` | distance from entry price (e.g. 0.025 = 2.5% away)
+- `risk (bool)` | risk taken per trade (e.g. `0.01` = 1% of account)
+- `stop_loss (float)` | distance from entry price (e.g. `0.025` = 2.5% away)
 - `take_profit (float)` | idem
 - `timer_trigger (int)` | maximum time to keep a position open (minutes)
 
 ### TODO
 
-- Higher timeframes
 - Momentum
 - Volume
 - RSI divergences

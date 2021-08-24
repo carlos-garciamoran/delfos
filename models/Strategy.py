@@ -15,6 +15,9 @@ class Strategy:
             if 'macro_RSIs' in parameters \
             else defaults['macro_RSIs']
 
+        self.MODE = strategy['mode'] \
+            if 'mode' in parameters \
+            else defaults['mode']
         self.PROFIT_CLOSE = strategy['profit_close'] \
             if 'profit_close' in parameters \
             else defaults['profit_close']
@@ -55,6 +58,7 @@ class Strategy:
             and self.CLOSE_RSI_MAX == other.CLOSE_RSI_MAX \
             and self.MACRO_RSI_MIN == other.MACRO_RSI_MIN \
             and self.MACRO_RSI_MAX == other.MACRO_RSI_MAX \
+            and self.MODE == other.MODE \
             and self.PROFIT_CLOSE == other.PROFIT_CLOSE \
             and self.REAL == other.REAL \
             and self.RISK == other.RISK \
@@ -70,6 +74,7 @@ class Strategy:
             f'\tCLOSE_RSI_MAX = {self.CLOSE_RSI_MAX}\n' \
             f'\tMACRO_RSI_MIN = {self.MACRO_RSI_MIN}\n' \
             f'\tMACRO_RSI_MAX = {self.MACRO_RSI_MAX}\n' \
+            f'\tMODE          = {self.MODE}\n' \
             f'\tPROFIT_CLOSE  = {self.PROFIT_CLOSE}\n' \
             f'\tREAL          = {self.REAL}\n' \
             f'\tRISK          = {self.RISK}\n' \

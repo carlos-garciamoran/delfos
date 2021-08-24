@@ -1,7 +1,7 @@
 import ccxt
 from loguru import logger
 
-from utils.constants import BINANCE_APIKEY, BINANCE_SECRETKEY
+from utils.constants import BINANCE_APIKEY, BINANCE_SECRETKEY, LEVERAGE
 
 
 class Trader:
@@ -30,6 +30,7 @@ class Trader:
                 del markets[symbol]
                 continue
 
+        # return list(map(lambda x: x.replace('/',''), markets))
         return list(markets)
 
     def setup_real_account(self, account):
@@ -54,7 +55,7 @@ class Trader:
             logger.debug(symbol[:-5])
             alt_symbol = symbol.replace('/', '')
 
-            self.exchange.fapiPrivate_post_leverage({'symbol': alt_symbol, 'leverage': 1})
+            self.exchange.fapiPrivate_post_leverage({'symbol': alt_symbol, 'leverage': LEVERAGE})
 
             try:
                 self.exchange.fapiPrivate_post_margintype({

@@ -4,6 +4,7 @@
         "macro_RSIs": [30, 70],
         "open_RSIs": [30, 70],
         "close_RSIs": [70, 30],
+        "mode": "neutral",
         "profit_close": false,
         "risk": 0.01,
         "stop_loss": 0.03,
@@ -14,6 +15,7 @@
     "strategies": [
         {
             "REAL": true,
+            "mode": "bullish",
             "profit_close": true
         },
         {

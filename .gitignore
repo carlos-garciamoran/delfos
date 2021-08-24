@@ -88,5 +88,3 @@ venv.bak/
 sessions/
 utils/constants.py
 strategies.json
-
-telegram_bot.py
