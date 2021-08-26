@@ -128,7 +128,7 @@ def trade(pairs):
         for position in account.positions:
             opened_positions[position.symbol] = position
 
-        logger.info(f'🔍 Checking {len(opened_positions)} positions for {strategy.name}...')
+        logger.debug(f'🔍 Checking {len(opened_positions)} positions for {strategy.name}...')
 
         # First, close all necessary positions for the given strategy
         for pair in pairs:
@@ -269,28 +269,12 @@ def open_new_positions(strategy, opened_positions):
 
         # This check is needed in the edge case of `strategy.RISK > strategy.STOP_LOSS`
         if cost <= account.available and account.free_trading_slots >= 1:
-            side = pair.determine_position_side(macro_RSI, strategy)
-
-            if side == 'sell' and strategy.MODE == 'bullish' or \
-                side == 'buy' and strategy.MODE == 'bearish':
-                # Skip side conflicting with strategy
-                continue
-
-            # HACK: move code away from this function. Simply check macro_RSI before including
-            #       pair in `account.potential` at `trade()`. NOTE: need to know `side` in advance
-            if macro_RSI <= strategy.MACRO_RSI_MIN and side == 'buy':
-                logger.info('⛔ Skipping false-flag (BUY in bearish market)')
-                continue
-            elif macro_RSI >= strategy.MACRO_RSI_MAX and side == 'sell':
-                logger.info('⛔ Skipping false-flag (SELL in bullish market)')
-                continue
-
             try:
-                position = Position(pair, side, cost, strategy, macro_RSI)
+                position = Position(pair, cost, strategy, macro_RSI)
             # NOTE: cath -2019 error (margin is insufficient)
             except ccxt.InsufficientFunds as e:
                 logger.error(
-                    f'InsufficientFunds: failed opening {side} {pair.symbol} with ${cost:.4f}'
+                    f'InsufficientFunds: failed opening {pair.side} {pair.symbol} with ${cost:.4f}'
                 )
 
                 logger.warning(account)
@@ -304,13 +288,13 @@ def open_new_positions(strategy, opened_positions):
             # HACK: check `tentative_size <= exchange.markets['limits']['amount']['min']` before creating order
             except ccxt.ExchangeError as e:
                 logger.error(
-                    f'Failed opening {side} {pair.symbol} with ${cost:.4f} ({(cost / pair.price):.4f}): {e}'
+                    f'Failed opening {pair.side} {pair.symbol} with ${cost:.4f} ({(cost / pair.price):.4f}): {e}'
                 )
 
                 continue
             except ccxt.NetworkError as e:
                 logger.error(
-                    f'NetworkError: failed opening {side} {pair.symbol} with ${cost:.4f} ({e})'
+                    f'NetworkError: failed opening {pair.side} {pair.symbol} with ${cost:.4f} ({e})'
                 )
                 logger.error(account)
 
@@ -319,7 +303,7 @@ def open_new_positions(strategy, opened_positions):
             account.log_new_position(position)
 
             # HACK: improve spacing: use :>x syntax
-            msg += (f'\n{emojis[side]:>6} {pair.symbol} {side} at {position.entry_price} with ${position.cost:.4f}\n'
+            msg += (f'\n{emojis[pair.side]:>6} {pair.symbol} {pair.side} at {position.entry_price} with ${position.cost:.4f}\n'
                 f'     🚫 SL: {position.stop_loss:.4f}\t\t 🤝 TP: {position.take_profit:.4f}\n'
                 f'     📈 RSI: {position.entry_RSI:.2f}\t\t 🎛  Macro-RSI: {position.entry_macro_RSI:.2f}\n'
                 f'     🧭 Tactic: {position.entry_trigger}\n'

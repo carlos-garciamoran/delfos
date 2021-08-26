@@ -4,6 +4,7 @@ class Pair:
         self.price = price
         self.RSI = RSI
 
+        self.side = ''  # 'buy', 'sell'
         self.tactic = ''  # 'trend', 'reversal'
         self.strength = 0.0
 
@@ -15,25 +16,42 @@ class Pair:
             f'\tstrength = {self.strength:.2f}\n'
 
     def is_interesting(self, macro_RSI, strategy):
-        """Return if price signal has been hit. If True, store tactic and strength."""
-        if macro_RSI >= strategy.MACRO_RSI_MAX and self.RSI < strategy.MACRO_RSI_MAX \
-            or macro_RSI <= strategy.MACRO_RSI_MIN and self.RSI > strategy.MACRO_RSI_MIN:
-            # NOTE: strength here is always >= 50 since the trend has priority
-            self.tactic = 'trend'
-            self.strength = abs(macro_RSI - self.RSI) + 50
-            return True
+        """Return if price signal has been hit. If True, set side, tactic, and strength."""
+        # Bet for the asset's trend
+        if strategy.MACRO_RSI:
+            # NOTE: could wrap in single `if` by using ternary assignment
+            if macro_RSI >= strategy.MACRO_RSI_MAX and self.RSI < strategy.MACRO_RSI_MAX and \
+                strategy.mode != 'bearish':
+                # Bet for the bullish trend in a non-overbought asset
+                self.side = 'buy'
+                self.tactic = 'trend'
+                self.strength = abs(macro_RSI - self.RSI) + 50  # NOTE: set to >= 50 to give the trend priority
 
-        if self.RSI >= strategy.OPEN_RSI_MAX or self.RSI <= strategy.OPEN_RSI_MIN:
+                return True
+
+            if macro_RSI <= strategy.MACRO_RSI_MIN and self.RSI > strategy.MACRO_RSI_MIN and \
+                strategy.mode != 'bullish':
+                # Bet for the bearish trend in a non-oversold asset
+                self.side = 'sell'
+                self.tactic = 'trend'
+                self.strength = abs(macro_RSI - self.RSI) + 50
+
+                return True
+
+        # Bet for the asset's bearish reversal when overbought
+        if self.RSI >= strategy.OPEN_RSI_MAX and strategy.MODE != 'bullish':
+            self.side = 'sell'
             self.tactic = 'reversal'
             self.strength = abs(50 - self.RSI)
+
+            return True
+
+        # Bet for the asset's bullish reversal when oversold
+        if self.RSI <= strategy.OPEN_RSI_MIN and strategy.MODE != 'bearish':
+            self.side = 'buy'
+            self.tactic = 'reversal'
+            self.strength = abs(50 - self.RSI)
+
             return True
 
         return False
-
-    def determine_position_side(self, macro_RSI, strategy):
-        """Return 'sell' if the asset should be shorted or 'buy' if it should be longed."""
-        # In both cases, follow the trend if the RSI is extreme, else look for the reverse
-        if self.RSI >= 50:
-            return 'buy' if macro_RSI >= strategy.MACRO_RSI_MAX else 'sell'
-
-        return 'sell' if macro_RSI <= strategy.MACRO_RSI_MIN else 'buy'

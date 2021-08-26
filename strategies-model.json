@@ -1,6 +1,7 @@
 {
     "defaults": {
         "account_size": 1000.0,
+        "macro_RSI": false,
         "macro_RSIs": [30, 70],
         "open_RSIs": [30, 70],
         "close_RSIs": [70, 30],

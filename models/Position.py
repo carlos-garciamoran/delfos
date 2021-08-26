@@ -4,16 +4,16 @@ from loguru import logger
 
 
 class Position:
-    def __init__(self, pair, side, cost, strategy, macro_RSI):
+    def __init__(self, pair, cost, strategy, macro_RSI):
         self.symbol = pair.symbol  # symbol name
-        self.side = side           # 'buy', 'sell'
+        self.side = pair.side      # 'buy', 'sell'
 
         self.entry_macro_RSI = macro_RSI  # for post-analysis purposes
         self.entry_RSI = pair.RSI         # for post-analysis purposes
         self.entry_trigger = pair.tactic  # 'trend', 'reversal'
 
         if strategy.REAL:
-            self.create_orders(pair, side, cost, strategy)
+            self.create_orders(pair, cost, strategy)
         else:
             self.opened_at = datetime.now()
             self.entry_price = pair.price
@@ -54,10 +54,10 @@ class Position:
             f'\tpnl       = {self.pnl}\n' \
             f'\tnet_pnl   = {self.net_pnl}\n'
 
-    def create_orders(self, pair, side, cost, strategy):
+    def create_orders(self, pair, cost, strategy):
         tentative_size = cost / pair.price  # base currency (COIN)
         order = strategy.exchange.create_order(
-            pair.symbol, 'MARKET', side, tentative_size
+            pair.symbol, 'MARKET', pair.side, tentative_size
         )
 
         logger.info(order)
@@ -68,7 +68,7 @@ class Position:
         self.size = order['filled']  # base currency
 
         self.set_SL_and_TP(strategy)  # NOTE: called here due to dependence on self.entry_price
-        inverted_side = 'sell' if side == 'buy' else 'buy'
+        inverted_side = 'sell' if pair.side == 'buy' else 'buy'
 
         # Create orders with the returned base size
         sl_order = strategy.exchange.create_order(

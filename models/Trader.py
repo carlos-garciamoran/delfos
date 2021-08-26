@@ -35,11 +35,18 @@ class Trader:
 
     def setup_real_account(self, account):
         """Reset margins if wanted, close open positions and set account balance."""
-        logger.warning('⚠️  Found REAL strategy; reset margin & leverage? Takes about 2 minutes (y/N) ', end='')
+        logger.warning(f'⚠️  Found REAL strategy')
+        logger.info('Reset leverage to x{LEVERAGE}? Takes about 1 minute (y/N) ', end='')
         answer = input()
         if answer == 'y' or answer == 'Y':
-            logger.debug('Adjusting margins and leverage...')
-            self.set_margins_and_leverage()
+            logger.debug(f'Setting all token\'s leverage to x{LEVERAGE}...')
+            self.set_leverage()
+
+        logger.warning(f'Reset margin mode to ISOLATED? Takes about 1 minute (y/N) ', end='')
+        answer = input()
+        if answer == 'y' or answer == 'Y':
+            logger.debug(f'Setting all token\'s margin mode to ISOLATED...')
+            self.set_margin_mode()
 
         # NOTE: `close_all_positions` does not ensure no positions are left open
         logger.debug('Fetching and closing open positions before launching...')
@@ -49,13 +56,19 @@ class Trader:
         free_balance = self.exchange.fetch_balance()['USDT']['free']
         account.available, account.INITIAL_SIZE = free_balance, free_balance
 
-    def set_margins_and_leverage(self):
-        """Set margins to ISOLATED and leverage to x1 on Binance."""
+    def set_leverage(self):
+        """Set all token's leverage to `LEVERAGE` on Binance."""
         for symbol in self.symbols:
             logger.debug(symbol[:-5])
             alt_symbol = symbol.replace('/', '')
 
             self.exchange.fapiPrivate_post_leverage({'symbol': alt_symbol, 'leverage': LEVERAGE})
+    
+    def set_margin_mode(self):
+        """Set  all token's margin mode to ISOLATED on Binance."""
+        for symbol in self.symbols:
+            logger.debug(symbol[:-5])
+            alt_symbol = symbol.replace('/', '')
 
             try:
                 self.exchange.fapiPrivate_post_margintype({
@@ -65,7 +78,7 @@ class Trader:
                 logger.debug(e)
                 continue
             else:
-                logger.info('Margin adjusted for ' + symbol)
+                logger.info('Margin mode adjusted for ' + symbol)
 
     def close_all_positions(self):
         """Close all open positions on exchange with market order."""

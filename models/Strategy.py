@@ -5,19 +5,24 @@ class Strategy:
     def __init__(self, account, defaults, strategy):
         parameters = strategy.keys()
 
+        self.MODE = strategy['mode'] \
+            if 'mode' in parameters \
+            else defaults['mode']
+
         self.OPEN_RSI_MIN, self.OPEN_RSI_MAX = strategy['open_RSIs'] \
             if 'open_RSIs' in parameters \
             else defaults['open_RSIs']
         self.CLOSE_RSI_MAX, self.CLOSE_RSI_MIN = strategy['close_RSIs'] \
             if 'close_RSIs' in parameters \
             else defaults['close_RSIs']
+
+        self.MACRO_RSI = strategy['macro_RSI'] \
+            if 'macro_RSI' in parameters \
+            else defaults['macro_RSI']
         self.MACRO_RSI_MIN, self.MACRO_RSI_MAX = strategy['macro_RSIs'] \
             if 'macro_RSIs' in parameters \
             else defaults['macro_RSIs']
 
-        self.MODE = strategy['mode'] \
-            if 'mode' in parameters \
-            else defaults['mode']
         self.PROFIT_CLOSE = strategy['profit_close'] \
             if 'profit_close' in parameters \
             else defaults['profit_close']
@@ -38,7 +43,8 @@ class Strategy:
             else defaults['timer_trigger']
 
         # TODO: think of a better alternative than a name (e.g. dump strategy attributes)
-        self.name = f'{self.OPEN_RSI_MIN}-{self.OPEN_RSI_MAX}_{self.CLOSE_RSI_MIN}-{self.CLOSE_RSI_MAX}_' \
+        self.name = f'{self.MODE}_{self.OPEN_RSI_MIN}-{self.OPEN_RSI_MAX}_' \
+            f'{self.CLOSE_RSI_MIN}-{self.CLOSE_RSI_MAX}_' \
             f'SL-{(self.STOP_LOSS*100):g}_TP-{(self.TAKE_PROFIT*100):g}' \
             f'_{self.TIMER_TRIGGER}'
         self.name += '_profit' if self.PROFIT_CLOSE else ''
@@ -52,13 +58,14 @@ class Strategy:
 
     def __eq__(self, other):
         # NOTE: `self.account` is not compared on purpose
-        return self.OPEN_RSI_MIN == other.OPEN_RSI_MIN \
+        return self.MODE == other.MODE \
+            and self.OPEN_RSI_MIN == other.OPEN_RSI_MIN \
             and self.OPEN_RSI_MAX == other.OPEN_RSI_MAX \
             and self.CLOSE_RSI_MIN == other.CLOSE_RSI_MIN \
             and self.CLOSE_RSI_MAX == other.CLOSE_RSI_MAX \
+            and self.MACRO_RSI == other.MACRO_RSI \
             and self.MACRO_RSI_MIN == other.MACRO_RSI_MIN \
             and self.MACRO_RSI_MAX == other.MACRO_RSI_MAX \
-            and self.MODE == other.MODE \
             and self.PROFIT_CLOSE == other.PROFIT_CLOSE \
             and self.REAL == other.REAL \
             and self.RISK == other.RISK \
@@ -68,18 +75,19 @@ class Strategy:
 
     def __str__(self):
         return self.name + '\n' \
+            f'\tMODE          = {self.MODE}\n' \
             f'\tOPEN_RSI_MIN  = {self.OPEN_RSI_MIN}\n' \
             f'\tOPEN_RSI_MAX  = {self.OPEN_RSI_MAX}\n' \
             f'\tCLOSE_RSI_MIN = {self.CLOSE_RSI_MIN}\n' \
             f'\tCLOSE_RSI_MAX = {self.CLOSE_RSI_MAX}\n' \
+            f'\tMACRO_RSI     = {self.MACRO_RSI}\n' \
             f'\tMACRO_RSI_MIN = {self.MACRO_RSI_MIN}\n' \
             f'\tMACRO_RSI_MAX = {self.MACRO_RSI_MAX}\n' \
-            f'\tMODE          = {self.MODE}\n' \
             f'\tPROFIT_CLOSE  = {self.PROFIT_CLOSE}\n' \
             f'\tREAL          = {self.REAL}\n' \
-            f'\tRISK          = {self.RISK}\n' \
-            f'\tSTOP_LOSS     = {self.STOP_LOSS}\n' \
-            f'\tTAKE_PROFIT   = {self.TAKE_PROFIT}\n' \
+            f'\tRISK          = {self.RISK*100:g}%\n' \
+            f'\tSTOP_LOSS     = {self.STOP_LOSS*100:g}%\n' \
+            f'\tTAKE_PROFIT   = {self.TAKE_PROFIT*100:g}%\n' \
             f'\tTIMER_TRIGGER = {self.TIMER_TRIGGER}\n'
 
     def determine_position_cost(self):
