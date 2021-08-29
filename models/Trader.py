@@ -33,20 +33,28 @@ class Trader:
         # return list(map(lambda x: x.replace('/',''), markets))
         return list(markets)
 
-    def setup_real_account(self, account):
+    def setup_real_account(self, account, reset):
         """Reset margins if wanted, close open positions and set account balance."""
         logger.warning(f'⚠️  Found REAL strategy')
-        logger.info('Reset leverage to x{LEVERAGE}? Takes about 1 minute (y/N) ', end='')
-        answer = input()
-        if answer == 'y' or answer == 'Y':
+
+        if reset:
             logger.debug(f'Setting all token\'s leverage to x{LEVERAGE}...')
             self.set_leverage()
 
-        logger.warning(f'Reset margin mode to ISOLATED? Takes about 1 minute (y/N) ', end='')
-        answer = input()
-        if answer == 'y' or answer == 'Y':
-            logger.debug(f'Setting all token\'s margin mode to ISOLATED...')
+            logger.debug('Setting all token\'s margin mode to ISOLATED...')
             self.set_margin_mode()
+        elif reset is None:
+            logger.info(f'Reset leverage to x{LEVERAGE}? Takes about 1 minute (y/N) ', end='')
+            answer = input()
+            if answer == 'y' or answer == 'Y':
+                logger.debug(f'Setting all token\'s leverage to x{LEVERAGE}...')
+                self.set_leverage()
+
+            logger.info('Reset margin mode to ISOLATED? Takes about 1 minute (y/N) ', end='')
+            answer = input()
+            if answer == 'y' or answer == 'Y':
+                logger.debug('Setting all token\'s margin mode to ISOLATED...')
+                self.set_margin_mode()
 
         # NOTE: `close_all_positions` does not ensure no positions are left open
         logger.debug('Fetching and closing open positions before launching...')

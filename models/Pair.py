@@ -19,9 +19,8 @@ class Pair:
         """Return if price signal has been hit. If True, set side, tactic, and strength."""
         # Bet for the asset's trend
         if strategy.MACRO_RSI:
-            # NOTE: could wrap in single `if` by using ternary assignment
             if macro_RSI >= strategy.MACRO_RSI_MAX and self.RSI < strategy.MACRO_RSI_MAX and \
-                strategy.mode != 'bearish':
+                strategy.MODE != 'bearish':
                 # Bet for the bullish trend in a non-overbought asset
                 self.side = 'buy'
                 self.tactic = 'trend'
@@ -30,7 +29,7 @@ class Pair:
                 return True
 
             if macro_RSI <= strategy.MACRO_RSI_MIN and self.RSI > strategy.MACRO_RSI_MIN and \
-                strategy.mode != 'bullish':
+                strategy.MODE != 'bullish':
                 # Bet for the bearish trend in a non-oversold asset
                 self.side = 'sell'
                 self.tactic = 'trend'

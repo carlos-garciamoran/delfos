@@ -1,6 +1,8 @@
 import json
 import math
 
+import ccxt
+
 
 class Account:
     def __init__(self, initial_size):
@@ -43,12 +45,24 @@ class Account:
             f'\tpnl          = {self.pnl:4f}\n' \
             f'\twins, loses  = {self.wins}, {self.loses}\n'
 
+    def fetch_real_balance(self):
+        """Fetch account data from exchange."""
+        try:
+            balance = self.strategy.exchange.fetch_balance()['USDT']
+            self.allocated = balance['used']
+            self.available = balance['free']
+        except ccxt.NetworkError:
+            self.fetch_real_balance()   # If failed, try again until success
+
     def log_new_position(self, position):
         """Add the position to its array and update the appropriate counters."""
         self.positions.append(position)
 
-        self.allocated += position.cost
-        self.available -= position.cost
+        if self.strategy.REAL:
+            self.fetch_real_balance()
+        else:
+            self.allocated += position.cost
+            self.available -= position.cost - position.fee
 
         self.free_trading_slots = math.floor(
             self.available * self.strategy.STOP_LOSS * self.strategy.RISK * 100
@@ -64,8 +78,11 @@ class Account:
         else:
             self.loses += 1
 
-        self.allocated -= position.cost  # Adjust allocated capital
-        self.available += position.cost + position.net_pnl - position.fee  # Recompound magic, baby
+        if self.strategy.REAL:
+            self.fetch_real_balance()
+        else:
+            self.allocated -= position.cost  # Adjust allocated capital
+            self.available += position.cost + position.net_pnl  # Recompound magic, baby
 
         self.fees += position.fee
         self.pnl += position.net_pnl

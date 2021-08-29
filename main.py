@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import json
 import math
 import sys
@@ -48,7 +49,7 @@ def main():
             try:
                 pairs, macro_RSI, HTTP_error = aggregator.get_market_data(symbols)
             except OSError as e:
-                logger.error('Crashed on market data request: ' + e)
+                logger.error(f'Crashed on market data request: {e}')
                 continue
 
             if HTTP_error:
@@ -97,7 +98,7 @@ def setup_accounts_and_strategies():
 
             if strategy.REAL:
                 exchange = trader.exchange
-                trader.setup_real_account(account)
+                trader.setup_real_account(account, args.reset)
 
                 strategy.exchange = exchange   # link the trader object to the strategy
         except KeyError as e:
@@ -239,18 +240,12 @@ def close_position(position, pair, strategy, trigger):
     # No need to substract fees since P&L factored is already net
     total = account.available + account.allocated
 
-    # TODO: code properly (e.g. move to account.log_closed_position())
-    if strategy.REAL:
-        balance = strategy.exchange.fetch_balance()['USDT']
-    else:
-        balance = {'free': account.available, 'used': account.allocated}
-
     logger.info('\n'
         f'     💸 Account P&L: {percentage:.2f}%, ${account.pnl:.4f}\n'
         f'     🤑 Wins: {account.wins}\t\t\t 🤔 Loses: {account.loses}\n'
-        f'     💰 Available capital: ${account.available:.4f} ({balance["free"]})\n'
-        f'     💵 Allocated capital: ${account.allocated:.4f} ({balance["used"]})\n'
-        f'     💳 Total     capital: ${total:.4f} ({balance["used"] + balance["free"]})\n'
+        f'     💰 Available capital: ${account.available:.4f}\n'
+        f'     💵 Allocated capital: ${account.allocated:.4f}\n'
+        f'     💳 Total     capital: ${total:.4f}\n'
     )
 
 
@@ -311,34 +306,32 @@ def open_new_positions(strategy, opened_positions):
 
     total = account.available + account.allocated
 
-    # TODO: code properly (e.g. move to account.log_closed_position())
-    if strategy.REAL:
-        balance = strategy.exchange.fetch_balance()['USDT']
-    else:
-        balance = {'free': account.available, 'used': account.allocated}
-
     # Only log when msg has been appended some content
     if msg.endswith('\n'):
         logger.warning(msg + '\n'
-            f'     💰 Available capital: ${account.available:.4f} ({balance["free"]})\n'
-            f'     💵 Allocated capital: ${account.allocated:.4f} ({balance["used"]})\n'
-            f'     💳 Total capital: ${total:.4f} ({balance["used"] + balance["free"]})\n'
+            f'     💰 Available capital: ${account.available:.4f}\n'
+            f'     💵 Allocated capital: ${account.allocated:.4f}\n'
+            f'     💳 Total capital: ${total:.4f}\n'
         )
 
 
 if __name__ == '__main__':
-    if len(sys.argv) == 1:
-        print('[!] Need to provide a session name as argv, exiting...')
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='_> init Delfos')
+
+    parser.add_argument('id', help='session ID')
+    parser.add_argument(
+        '--reset', action=argparse.BooleanOptionalAction,
+        help='reset leverage and margin mode on startup'
+    )
+    args = parser.parse_args()
 
     last_index = -1
-    _id = sys.argv[1]
-    prefix = f'{_id}_{datetime.now():%Y-%m-%d}'
+    prefix = f'{args.id}_{datetime.now():%Y-%m-%d}'
 
     for session in listdir('sessions/'):
         if session.startswith(prefix):
             # Existing day-session found: get the last index and increment
-            last_dash = session.find('_', len(_id) + 1)
+            last_dash = session.find('_', len(args.id) + 1)
             index = int(session[last_dash+1:])
             if index > last_index:
                 last_index = index
