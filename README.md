@@ -54,3 +54,8 @@ mv .env.example .env
 mv strategies-model.json strategies.json
 mv utils/constants-model.py utils/constants.py
 ```
+
+## Disclaimer
+This software is for educational purposes only. Do not risk money which you cannot afford to lose.
+
+USE THE SOFTWARE AT YOUR OWN RISK. THE AUTHOR AND ALL AFFILIATES ASSUME NO RESPONSIBILITY FOR YOUR TRADING RESULTS.
